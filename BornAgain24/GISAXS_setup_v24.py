@@ -50,7 +50,7 @@ def create_spherical_detector(
 
     return detector
 
-def get_simulation_2D_v23(sample_model,
+def get_simulation_2D(sample_model,
                           detectorDistBeamtime='feb',
                           angle=None,                 # incidence angle in degrees
                           beamIntensity=1.3e12,
@@ -87,3 +87,49 @@ def get_simulation_2D_v23(sample_model,
         simulation.detector().setRegionOfInterest(x1, y1, x2, y2)
 
     return simulation
+
+def get_sampleTest():
+    # --- materials ---
+    material_PS    = ba.RefractiveMaterial("PS",    2.51433698e-06, 2.35385822e-09)
+    material_P2VP  = ba.RefractiveMaterial("P2VP",  1.656e-06,      1.096e-09)
+    material_FA    = ba.RefractiveMaterial("FA",    3.90901641e-06, 1.79148728e-07)
+    material_Si_Sub= ba.RefractiveMaterial("Si Sub",5.04218633e-06, 7.83926453e-08)
+    material_SiO2  = ba.RefractiveMaterial("SiO2",  4.7465490081665e-06, 4.1351946628761e-08)
+    vacuum         = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
+
+    # --- particle (PS “hemisphere” in old comment used a full Sphere; keep Sphere unless you intend hemispheres) ---
+    radius_PS = 48/2 * nm
+    ff_PS = ba.Sphere(radius_PS)
+    particle_PS = ba.Particle(material_PS, ff_PS)
+
+    # --- structure / interference ---
+    # Old: InterferenceHardDisk(spacing/2*nm, eta)  # liquid-like order
+    # New: use Radial Paracrystal with nearest-neighbor distance = spacing
+    spacing = 70.95529824561405 * nm
+
+    iff = ba.InterferenceRadialParacrystal(spacing, 250*nm)          # damping_length=0 by default
+    # pick a modest nearest-neighbor spread; tune omega to taste
+    iff.setProbabilityDistribution(ba.Profile1DGauss(0.02*spacing))
+
+    # Build a structured layout from the interference function
+    layout = ba.StructuredLayout(iff)
+    layout.addParticle(particle_PS)
+
+    # v24 note: for RadialParacrystal you should set the areal particle density (in 1/nm^2)
+    # A simple first guess is ~ 1/spacing^2; adjust by packing fraction if needed.
+    #layout.setParticleDensity(1.0 / ((spacing/nm)*(spacing/nm)))  # 1/nm^2
+
+    # --- layers ---
+    top = ba.Layer(vacuum)
+    # If particles sit at the top surface, add the struct to the top layer
+    top.addStruct(layout)
+
+    sio2 = ba.Layer(material_SiO2, 2*nm)
+    sub  = ba.Layer(material_Si_Sub)
+
+    # --- sample ---
+    sample = ba.Sample()
+    sample.addLayer(top)
+    sample.addLayer(sio2)
+    sample.addLayer(sub)
+    return sample
