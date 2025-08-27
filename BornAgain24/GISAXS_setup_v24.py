@@ -1,8 +1,10 @@
 # BornAgain v23+ (Python)
 import math
 import bornagain as ba
+from bornagain import ba_plot as bp
 from bornagain import deg, nm
-
+import datetime
+import os
 # ---- your GALAXY / RAYONIX geometry (edit as needed) ----
 rayonix_npx = 4096
 rayonix_npy = 4096
@@ -13,7 +15,26 @@ beam_ypos = 2048
 
 wavelength = 0.125916*nm           # your beamline wavelength
 # ----------------------------------------------------------
+def real_data(filename, directory):
+    """
+    Loads experimental data and returns numpy array.
+    """
+    filepath = os.path.join(directory, filename)
+    return ba.IOFactory.readDatafield(filepath)
 
+def transform_axis(result, incidence_angle):
+    transformer = ba.FrameTrafo.ScatteringToQ(wavelength, incidence_angle * deg)
+    transformed_result= transformer.transformedDatafield(result)
+    return transformed_result
+
+def save_result(result):
+    today = datetime.date.today()
+    axes_limits = bp.get_axes_limits(result.plottableField())
+    metadata = {
+    "axes_limits": axes_limits,
+    "simulation date": today
+    }   
+    
 def _mm_over_mm_to_angle(x_over_D):
     # exact small-angle mapping using atan
     return math.atan(x_over_D)
@@ -52,9 +73,9 @@ def create_spherical_detector(
 
 def get_simulation_2D(sample_model,
                           detectorDistBeamtime='feb',
-                          angle=None,                 # incidence angle in degrees
+                          incidence_angle=None,                 # incidence angle in degrees
                           beamIntensity=1.3e12,
-                          ROI=None,
+                          ROI=[-1.5, -1.5, 1.5, 1.5],
                           background=23.0):
     """
     v23+ replacement using SphericalDetector. Keeps your old knobs:
@@ -69,7 +90,7 @@ def get_simulation_2D(sample_model,
     else:
         raise ValueError("detectorDistBeamtime must be 'feb' or 'dec'")
 
-    alpha_i = angle * deg
+    alpha_i = incidence_angle * deg
     beam = ba.Beam(beamIntensity, wavelength, alpha_i)
 
     detector = create_spherical_detector(detectorDist)
@@ -82,9 +103,9 @@ def get_simulation_2D(sample_model,
     # simulation.detector().addMask(ba.Rectangle(148.07, 140.59, 152.02, 177.91), True)
 
     # Region of interest (still supported in v23; args are in deg)
-    if ROI is not None:
-        x1, y1, x2, y2 = ROI
-        simulation.detector().setRegionOfInterest(x1, y1, x2, y2)
+    
+    x1, y1, x2, y2 = ROI
+    simulation.detector().setRegionOfInterest(x1*deg, y1*deg, x2*deg, y2*deg)
 
     return simulation
 
