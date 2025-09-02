@@ -1,4 +1,3 @@
-# BornAgain v23+ (Python)
 import math
 import bornagain as ba
 from bornagain import ba_plot as bp
@@ -15,12 +14,12 @@ beam_ypos = 2048
 
 wavelength = 0.125916*nm           # your beamline wavelength
 # ----------------------------------------------------------
-def real_data(filename, directory):
+def real_data(directory, filename):
     """
     Loads experimental data and returns numpy array.
     """
     filepath = os.path.join(directory, filename)
-    return ba.IOFactory.readDatafield(filepath)
+    return ba.readData2D(filepath)
 
 def transform_axis(result, incidence_angle):
     transformer = ba.FrameTrafo.ScatteringToQ(wavelength, incidence_angle * deg)

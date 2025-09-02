@@ -922,12 +922,13 @@ def get_axes_limits(r1, units):
         limits.append(ami)
         limits.append(ama)
     return limits
-def real_data(filename, directory):
+def real_data(directory, filename):
     """
     Loads experimental data and returns numpy array.
     """
     filepath = os.path.join(directory, filename)
     return ba.readData2D(filepath).npArray()
+
 def find_nearest(array, value):
     """
     Finds the closest value to a specified target in a NumPy array
