@@ -70,7 +70,6 @@ def normalize_histogram(data, bins=10):
     bin_values = (bin_edges[:-1] + bin_edges[1:]) / 2
     
     return bin_values, normalized_counts
-
 def create_detector(detector_distance):
     """
     A model of the GALAXY detector
@@ -629,7 +628,6 @@ def get_simulation_2D(sample_model, detectorDistBeamtime = 'feb', angle = None, 
     
 
     return simulation
-
 def beamStopMask(x1 = - 0.041 , y1 = - 0.2, x2 = 0.04292, y2 = 0.5935):
     '''How mask for beamstop was calculated'''
     rayonix_size_y = 300
@@ -663,7 +661,6 @@ def beamStopMask(x1 = - 0.041 , y1 = - 0.2, x2 = 0.04292, y2 = 0.5935):
     print(mm_BOTLEFT_y) 
     print(mm_TOPRIGHT_x)
     print(mm_TOPRIGHT_y)
-
 def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, center_horizontal_slice_value, center_vertical_slice_value, number_slices):
     '''
     sample: getSample()
@@ -740,7 +737,6 @@ def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, 
     '''
     
     return simulation
-
 def get_sampleBasicStructure3_Varying_roughness(P):
     material_PS = ba.RefractiveMaterial("PS", 2.51436745E-06, 2.35391329E-09)
     material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.04383115E-06, 7.84182177E-08) #7.644e-06
@@ -788,7 +784,6 @@ def get_sampleBasicStructure3_Varying_roughness(P):
     sample.addLayer(layer_4)
 
     return sample
-
 def get_simulation_line_Fitting(P):
     '''
     sample: getSample()
@@ -865,9 +860,6 @@ def get_simulation_line_Fitting(P):
     simulation.detector().addMask(ba.Rectangle(mm_x1, ROI_y1, mm_x2, ROI_y2), False)
     
     return simulation
-
-
-
 def get_sampleTest():
     material_PS = ba.RefractiveMaterial("PS", 2.51433698E-06, 2.35385822E-09)
     material_P2VP = ba.RefractiveMaterial("P2VP", 1.656e-06, 1.096e-09)
@@ -928,7 +920,6 @@ def real_data(directory, filename):
     """
     filepath = os.path.join(directory, filename)
     return ba.readData2D(filepath).npArray()
-
 def find_nearest(array, value):
     """
     Finds the closest value to a specified target in a NumPy array

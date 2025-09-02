@@ -102,7 +102,7 @@ def get_sample(approximation,radius):
     iff.setProbabilityDistribution(iff_pdf)
     iff.setKappa(1.5) #size-distribution model 
 
-    surface_layout = ba.StructuredLayout(iff)
+    #surface_layout = ba.StructuredLayout(iff)
     
     #surface_layout.setTotalParticleSurfaceDensity(0.0265)
 

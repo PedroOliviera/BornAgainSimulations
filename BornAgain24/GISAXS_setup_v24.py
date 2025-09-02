@@ -4,16 +4,103 @@ from bornagain import ba_plot as bp
 from bornagain import deg, nm
 import datetime
 import os
-# ---- your GALAXY / RAYONIX geometry (edit as needed) ----
-rayonix_npx = 4096
-rayonix_npy = 4096
-rayonix_pixel_size_mm = 0.073242   # mm
-# beam_xpos, beam_ypos are pixel indices where the direct beam would hit the panel
-beam_xpos = 2048                   # e.g., middle of the panel; EDIT to your logs
-beam_ypos = 2048
+import numpy as np
 
-wavelength = 0.125916*nm           # your beamline wavelength
+# -------------------- your inputs --------------------
+wavelength_nm = 0.125916          # 1.25916 Å = 0.125916 nm
+wavelength = 0.125916 * nm        # 1.25916 Å = 0.125916 nm
+rayonix_npx, rayonix_npy = 4096, 4096
+rayonix_pixel_size_mm = 0.073242  # mm
+rayonix_size_x_mm = 300.0
+rayonix_size_y_mm = 300.0
+
+# Beam center from instrument (authoritative)
+xpos_mm = 151.63
+ypos_mm = 142.137
+
+# (Legacy) pixel guess; we'll just compute the actual pixel center from mm
+xpos_pix_guess = 2048
+ypos_pix_guess = 2048
+
+
 # ----------------------------------------------------------
+flip_v = True                      # <<< True if v index grows downward (images). False if v grows upward.
+
+# ---------------- core converters ----------------
+
+# -------------------- helpers --------------------
+def uv_mesh(npx, npy, roi=None):
+    """
+    Returns U,V index grids (shape Nv x Nu) with indexing='xy'.
+    roi = (u_min, u_max, v_min, v_max), max is exclusive (Python slice semantics).
+    """
+    if roi is None:
+        u_min, u_max, v_min, v_max = 0, npx, 0, npy
+    else:
+        u_min, u_max, v_min, v_max = roi
+    u = np.arange(u_min, u_max)
+    v = np.arange(v_min, v_max)
+    U, V = np.meshgrid(u, v, indexing='xy')
+    return U, V
+
+def uv_to_angles_using_mm(U, V, pixel_size_mm, L_mm,
+                          beam_x_mm, beam_y_mm,
+                          alpha_i_rad, flip_v=True):
+    """
+    Map detector indices (U,V) to (alpha_f, phi).
+    We convert indices -> mm, then subtract beam-center in mm for offsets.
+    """
+    # Detector coordinates in mm (origin at detector pixel (0,0) corner)
+    x_mm = U * pixel_size_mm
+    y_mm = V * pixel_size_mm
+
+    # Offsets so that +X is to the detector right, +Y is upward
+    X = x_mm - beam_x_mm
+    if flip_v:
+        Y = beam_y_mm - y_mm   # V grows down -> flip so +Y is up
+    else:
+        Y = y_mm - beam_y_mm
+
+    two_theta = np.arctan2(X, L_mm)                          # in-plane azimuth (≈ 2θ)
+    alpha_det = np.arctan2(Y, np.sqrt(L_mm**2 + X**2))       # elevation vs beam
+    alpha_f = alpha_det + alpha_i_rad                        # vs sample plane
+    phi = two_theta
+    return alpha_f, phi
+
+def angles_to_q(alpha_i, alpha_f, phi, wavelength_nm):
+    """
+    GISAXS vacuum scattering vector (qx,qy,qz) in 1/nm.
+    x: along beam on surface, y: transverse in-plane, z: surface normal up.
+    """
+    k = 2*np.pi / wavelength_nm
+    qx = k*(np.cos(alpha_f)*np.cos(phi) - np.cos(alpha_i))
+    qy = k*(np.cos(alpha_f)*np.sin(phi))
+    qz = k*(np.sin(alpha_f) + np.sin(alpha_i))
+    return qx, qy, qz
+
+def uv_to_q_maps(detectorDistBeamtime,
+                 alpha_i_deg,
+                 roi=None, flip_v=True):
+    """
+    Returns (qx, qy, qz, alpha_f, phi) arrays for the full frame or an ROI.
+    Shapes are (Nv, Nu) to match image arrays.
+    """
+
+    if detectorDistBeamtime == 'feb':
+        detectorDist = 2337.126  # mm
+    elif detectorDistBeamtime == 'dec':
+        detectorDist = 3052.624  # mm
+    else:
+        raise ValueError("detectorDistBeamtime must be 'feb' or 'dec'")
+
+    U, V = uv_mesh(rayonix_npx, rayonix_npy, roi=roi)
+    alpha_i_rad = np.deg2rad(alpha_i_deg)
+    alpha_f, phi = uv_to_angles_using_mm(U, V, rayonix_pixel_size_mm, detectorDist ,
+                                         xpos_mm, ypos_mm,
+                                         alpha_i_rad, flip_v=flip_v)
+    qx, qy, qz = angles_to_q(alpha_i_rad, alpha_f, phi, wavelength_nm)
+    return qx, qy, qz, alpha_f, phi
+
 def real_data(directory, filename):
     """
     Loads experimental data and returns numpy array.
@@ -71,7 +158,7 @@ def create_spherical_detector(
     return detector
 
 def get_simulation_2D(sample_model,
-                          detectorDistBeamtime='feb',
+                          detectorDistBeamtime=None,
                           incidence_angle=None,                 # incidence angle in degrees
                           beamIntensity=1.3e12,
                           ROI=[-1.5, -1.5, 1.5, 1.5],

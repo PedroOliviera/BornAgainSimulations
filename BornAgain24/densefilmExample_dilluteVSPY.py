@@ -3,7 +3,7 @@
 Dilute film of small spheres
 """
 import bornagain as ba
-from bornagain import ba_plot as bp, deg, nm
+from bornagain import ba_plot as bp, deg, nm, R3
 import height_radius_from_lineprofiles as h_r
 import matplotlib.pyplot as plt
 from bornagain.numpyutil import Arrayf64Converter as dac
@@ -49,7 +49,7 @@ def max_particle_density(radius_nm: float, phi_max: float = 0.639) -> float:
     density = phi_max / volume
     return density
 
-def get_sample(approximation,radius):
+def get_sample(approximation, p2vp_radius):
 
     # Materials
     material_PS = ba.RefractiveMaterial("PS", 2.50267703E-06, 2.46904652E-09)
@@ -57,61 +57,6 @@ def get_sample(approximation,radius):
     material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.04383115E-06, 7.84182177E-08) #7.644e-06
     material_SiO2 = ba.RefractiveMaterial("SiO2", 4.74631315E-06, 4.16025294E-08)
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
-
-    # Define layers
-    layer_vac = ba.Layer(material_Vacuum)
-    #layer_vac.addStruct(surface_layout)
-    layer_PS_Top = ba.Layer(material_PS, 214.8*nm, roughness_PS)
-    layer_SiO2 = ba.Layer(material_SiO2, 2*nm, roughness_SiO2)
-    layer_Si = ba.Layer(material_Si_Sub)
-    #layer_PS_Top.depositParticle(max_particle_density(radius), particle, ba.Random2D_PY)
-    layer_PS_Top.plugLiquid(max_particle_density(radius), particle, approximation)
-    
-    omega_order = 9*nm
-    spacing = 60*nm
-
-    P1 = 10
-
-    # Minimal test — adjust file path as needed
-    lineprofile_dir = r"C:\Users\Pedro\OneDrive - McMaster University\PhD - School\Research\Characterization\AFM\2024\4-29-2024\lineProfiles_35_Big_OnePerParticle.txt"
-    
-    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
-    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc)
-
-    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=P1, scale=True)
-    #h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
-
-    #########################################----SURFACE PARTICLES----################################################
-
-
-    # Interference Functions
-    iff = ba.InterferenceRadialParacrystal(spacing, 250*nm)
-    iff_pdf = ba.Profile1DGauss(omega_order)
-    iff.setProbabilityDistribution(iff_pdf)
-    iff.setKappa(1.5) #size-distribution model 
-
-    surface_layout = ba.StructuredLayout(iff)
-    #surface_layout.setTotalParticleSurfaceDensity(0.0265)
-    layout = ba.StructuredLayout(iff)
-
-    for i in range(P1):
-        
-        ff_PS = ba.SpheroidalSegment((diam_K[i]/2) * nm, height_K[i]/2 * nm, 0, 0)
-        particle_PS= ba.Particle(material_PS, ff_PS)
-        surface_layout.addParticle(particle_PS, weight_K[i])
-
-
-    # Internal Particles
-    
-    distr = ba.DistributionGaussian(10*nm, 1*nm)
-    for parsample in distr.distributionSamples():
-        ff = ba.Spheroid(parsample.value, 5*nm)
-        particle = ba.Particle(material_P2VP, ff)
-        layout.addParticle(particle, parsample.weight)
-
-    ff = ba.Sphere(radius * nm)
-    #ff = ba.Spheroid(radius * nm, radius/1.5 * nm)
-    particle = ba.Particle(material_P2VP, ff)
 
     #Roughness
     #----------------PS----------------------------------------------------
@@ -128,6 +73,78 @@ def get_sample(approximation,radius):
     autocorr = ba.SelfAffineFractalModel(sig, hurst, corr)
     roughness_SiO2 = ba.Roughness(autocorr, ba.ErfTransient())
 
+    # Define layers
+    layer_vac = ba.Layer(material_Vacuum)
+    layer_PS_Top = ba.Layer(material_PS, 214.8*nm, roughness_PS)
+    layer_SiO2 = ba.Layer(material_SiO2, 2*nm, roughness_SiO2)
+    layer_Si = ba.Layer(material_Si_Sub)
+    
+    
+    omega_order = 9*nm
+    spacing = 60*nm
+
+    P1 = 3
+
+    # Minimal test — adjust file path as needed
+    lineprofile_dir = r"C:\Users\Pedro\OneDrive - McMaster University\PhD - School\Research\Characterization\AFM\2024\4-29-2024\lineProfiles_35_Big_OnePerParticle.txt"
+    
+    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc)
+
+    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=P1, scale=True)
+    #h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+
+    #########################################----SURFACE PARTICLES----################################################
+
+    # Interference Functions
+    iff = ba.InterferenceRadialParacrystal(spacing, 250*nm)
+    iff_pdf = ba.Profile1DGauss(omega_order)
+    iff.setProbabilityDistribution(iff_pdf)
+    iff.setKappa(1.5) #size-distribution model 
+
+    #surface_layout = ba.StructuredLayout(iff)
+    
+    #surface_layout.setTotalParticleSurfaceDensity(0.0265)
+
+
+    for i in range(P1):
+        
+        ff_PS = ba.SpheroidalSegment((diam_K[i]/2) * nm, height_K[i]/2 * nm, 0, height_K[i]/2 * nm)
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        #surface_layout.addParticle(particle_PS, weight_K[i])
+
+    #layer_vac.addStruct(surface_layout)
+
+    # Internal Particles
+    
+    density = max_particle_density(p2vp_radius)
+    print(density)
+    
+    '''
+    distr = ba.DistributionGaussian(radius*nm, radius*0.1*nm)
+    for parsample in distr.distributionSamples():
+        ff = ba.Sphere(parsample.value)
+        #ff = ba.Spheroid(radius * nm, radius/1.5 * nm)
+        particle = ba.Particle(material_P2VP, ff)
+        layer_PS_Top.plugLiquid(density * parsample.weight, particle, approximation)
+    '''
+    p2vp_radius = 15*nm
+    PS_radius = 30*nm
+    core_ff = ba.Sphere(p2vp_radius)
+    shell_ff = ba.Sphere(PS_radius)
+    #ff = ba.Spheroid(radius * nm, radius/1.5 * nm)
+    core_particle = ba.Particle(material_P2VP, core_ff)
+    shell_particle = ba.Particle(material_PS, shell_ff)
+    particle = ba.Compound()
+    particle.addComponent(shell_particle)
+    particle.addComponent(core_particle, R3(0, 0, 0))
+
+    layer_PS_Top.plugLiquid(density, particle, approximation)
+
+    #ff = ba.Sphere(radius * nm)
+    
+    #particle = ba.Particle(material_P2VP, ff)
+
     # Sample
     sample = ba.Sample()
     sample.addLayer(layer_vac)
@@ -137,24 +154,23 @@ def get_sample(approximation,radius):
     return sample
 
 def get_simulation(sample):
-    beam = ba.Beam(1e9, 1.25916*ba.angstrom, 0.2*deg)
+    beam = ba.Beam(1e9, 1.25916*ba.angstrom, 0.15*deg)
 
     n = 1000
     detector = ba.SphericalDetector(n, -0.5*deg, 0.5*deg, n, 0., 1*deg)
     simulation = ba.ScatteringSimulation(beam, sample, detector)
     return simulation
 if __name__ == '__main__':
+    radi = [10,20,30,40]
     samples = [
-        #get_sample(ba.Random3D_PY,20),
-        #get_sample(ba.Random3D_PY,25),
-        #get_sample(ba.Random3D_PY,27),
-        get_sample(ba.Random3D_PY,30),
-        get_sample(ba.Random3D_Dilute,30),
+        get_sample(ba.Random3D_PY, 25),
+        get_sample(ba.Random3D_Dilute, 25)
     ]
     results = [ get_simulation(sample).simulate() for sample in samples ]
-    labels = [30*nm, 33*nm] #[20*nm, 25*nm, 27*nm, 30*nm, 33*nm]
+    labels = ["PY Model", "Dilute"] #[20*nm, 25*nm, 27*nm, 30*nm, 33*nm]
     for label, r in zip(labels, results):
         simulationData = dac.asNpArray(r.dataArray())
-        save_filename = "test_" + str(label) + "_spheroids_20deg_2D.npy"
+        save_filename = "test_" + str(label) + "_spheres_distribution_15deg_3D.npy"
         np.save(save_filename, simulationData)
-        graphing.plot2D(simulationData=simulationData, realDat_axes=[0, 0.5, 0, 0.5], zlim=[0.1,200], title=label)
+        graphing.plot2D(simulationData=simulationData, realDat_axes=[0, 0.5, 0, 0.5], zlim=[0.01,4.7e3], title=label)
+    plt.show()
