@@ -42,7 +42,7 @@ def get_sample(num_samples):
     
     iff.setProbabilityDistribution(iff_pdf)
     
-    #iff.setKappa(1.5) #size-distribution model 
+    iff.setKappa(1.5) #size-distribution model 
 
     surface_layout.setInterference(iff)
     surface_layout.setTotalParticleSurfaceDensity(26500000000) #PLAY WITH THIS 0.0265
