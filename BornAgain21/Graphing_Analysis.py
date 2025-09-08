@@ -266,9 +266,80 @@ def plot2D(
                         fontsize=12, ha='left', va='center')
 
     plt.tight_layout()
+
+def plot2D_simulationComparison(
+    realData=None,
+    simulationData=None,
+    realDat_axes=None,
+    simData_axes = None,
+    graphed_axes=[-1, 1, 0, 2],
+    L1_qz=None, L2_qy=None, L3_qz=None, L4_qy=None, L5_qz=None,
+    title="",
+    zlim=[22, 5e5]
+):
+    if simulationData is None and realData is None:
+        print("No data provided.")
+        return
+
+    datasets = []
+    axes_list = []
+
+    if simulationData is not None:
+        datasets.append(("Custom", simulationData))
+        axes_list.append(simData_axes) #g2.get_axes_limits(result, ba.Coords_QSPACE))
+        graphed_axes = simData_axes # g2.get_axes_limits(result, ba.Coords_QSPACE)
+    if realData is not None:
+        datasets.append(("CosineRippleGauss", realData))
+        axes_list.append(realDat_axes)
+
+    n = len(datasets)
+    plt.figure(figsize=(7.5 * n, 6))
+
+    # Linecut definitions with labels
+    vert_lines = [(L2_qy, 'II'), (L4_qy, 'IV')]
+    horiz_lines = [(L1_qz, 'I'), (L3_qz, 'III'), (L5_qz, 'V')]
+
+    for i, ((label, data), axes) in enumerate(zip(datasets, axes_list)):
+        plt.subplot(1, n, i + 1)
+
+        im = bp.plot_array(
+            data,
+            axes_limits=axes,
+            intensity_min=zlim[0],
+            intensity_max=zlim[1],
+            xlabel=r'$Q_{y} \;(1/{\rm nm})$',
+            ylabel=r'$Q_{z} \;(1/{\rm nm})$',
+            zlabel=None,
+            with_cb=True,
+            cmap='gist_ncar'
+        )
+        ax = im.axes
+        ax.set_title(label if label == "Experiment" else f"{label}: {title}", fontsize=14)
+
+        ax.set_xlim(graphed_axes[0], graphed_axes[1])
+        ax.set_ylim(graphed_axes[2], graphed_axes[3])
+        ax.xaxis.label.set_fontsize(14)
+        ax.yaxis.label.set_fontsize(14)
+
+        # Draw vertical (qy) linecuts
+        for qy, roman in vert_lines:
+            if qy is not None:
+                ax.axvline(x=qy, color='red', linewidth=1)
+                ax.text(qy, graphed_axes[2], f'{roman}', color='red',
+                        fontsize=12, ha='center', va='bottom', rotation=90)
+
+        # Draw horizontal (qz) linecuts
+        for qz, roman in horiz_lines:
+            if qz is not None:
+                ax.axhline(y=qz + 0.005, color='blue', linewidth=1)
+                ax.axhline(y=qz - 0.005, color='red', linewidth=1)
+                ax.text(graphed_axes[0], qz, f'{roman}', color='black',
+                        fontsize=12, ha='left', va='center')
+
+    plt.tight_layout()
     plt.show()
 
-def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_axes2=None, xmin = float, xmax = float):
+def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_axes2=None, xmin = float, xmax = float, labels = None):
     """Inputs:
     vert_slice_q: will take max of this vert slice value and use for horizontal slice value
     data_npArrays: array of dataset to be compared
@@ -290,7 +361,7 @@ def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_
         print(hor_slice_q)
         
         step = 0.01
-        #hor_slice_q = 0.251
+        #hor_slice_q = 0.03
         # Now take horizontal slice through that maximum
         x2, y2 = g2.plot_slices(data, axesLimits=data_axes, horiz_slice=hor_slice_q)
         x2, y2 = g2.integrate_plt_slices(start = hor_slice_q - step, stop= hor_slice_q + step, data=data, axLim=data_axes, labelname=i, num=20, horiz_slice=True)
@@ -302,10 +373,10 @@ def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_
         y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
 
         # Get color from colormap
-        color = cmap(i-1)
+        color = cmap(i)
 
         # Plot with label and custom color
-        plt.plot(x2_norm, y_s, label = rf"$\alpha = {i:.2f}^\circ$", color=color)
+        plt.plot(x2_norm, y_s, label = labels[i], color=color)
 
     if data2_npArray is not None:
         x1, y1 = g2.plot_slices(data2_npArray, axesLimits=data_axes2, vert_slice=vert_slice_q)
@@ -326,7 +397,7 @@ def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_
 
 
     # Improve legend and axis formatting
-    plt.legend(title="Incidence Angle", fontsize=9, ncol=2)  # 2-column legend if many datasets
+    plt.legend(title="Form Factor", fontsize=9, ncol=2)  # 2-column legend if many datasets
     plt.ylim(bottom=2e-6)
     plt.xlim(left=0.055)
     plt.ylabel("Normalized Intensity", fontsize=11)
@@ -336,4 +407,3 @@ def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_
     plt.xscale("log")
     plt.grid(which="both", ls="--", lw=0.5, alpha=0.6)
     plt.tight_layout()
-    plt.show()

@@ -103,7 +103,8 @@ def get_simulation_2D(sample_model, detectorDistBeamtime = 'feb', angle = None, 
         simulation.detector().setRegionOfInterest(ROI[0], ROI[1], ROI[2], ROI[3])
     
 
-
+    if (oneThread):
+        simulation.options().setNumberOfThreads(1)
 
     
 
