@@ -94,7 +94,7 @@ def get_sample():
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
     # collection of particles
-    ff = CosineCapFormFactor(30*nm, 6*nm)
+    ff = CosineCapFormFactor(25*nm, 15*nm)
     particle = ba.Particle(material_PS, ff)
 
     # Define layers
@@ -106,7 +106,7 @@ def get_sample():
     omega_order = 9*nm
     spacing = 60*nm
 
-    layer_vac.depositParticle(0.01, particle)
+    layer_vac.depositParticle(0.001, particle)
 
     #particle = ba.Particle(material_PS, ba.Sphere(5*nm))
 
@@ -124,13 +124,15 @@ def get_sample():
     # assemble sample
     sample = ba.Sample()
     sample.addLayer(layer_vac)
+    sample.addLayer(layer_PS_Top)
+    sample.addLayer(layer_SiO2)
     sample.addLayer(layer_Si)
     return sample
 
 def get_simulation(sample):
-    beam = ba.Beam(1e9, 1.25916*angstrom, 0.14*deg)
+    beam = ba.Beam(1e9, 1.25916*angstrom, 0.13*deg)
     n = 100
-    det = ba.SphericalDetector(n, -1*deg, 1*deg, n, 0, 2*deg)
+    det = ba.SphericalDetector(n, 0*deg, 0.4*deg, n, 0, 1*deg)
     simulation = ba.ScatteringSimulation(beam, sample, det)
 
     # Deactivate multithreading:
@@ -152,7 +154,7 @@ def get_sample_hemi():
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
     # collection of particles
-    ff = ba.SpheroidalSegment(30 * nm, 6/2 * nm, 0, 6/2 * nm)
+    ff = ba.SpheroidalSegment(25 * nm, 7* nm, 0, 7 * nm)
     particle = ba.Particle(material_PS, ff)
 
     # Define layers
@@ -182,6 +184,8 @@ def get_sample_hemi():
     # assemble sample
     sample = ba.Sample()
     sample.addLayer(layer_vac)
+    sample.addLayer(layer_PS_Top)
+    sample.addLayer(layer_SiO2)
     sample.addLayer(layer_Si)
     return sample
 
@@ -189,11 +193,15 @@ if __name__ == '__main__':
     sample = get_sample()
     simulation = get_simulation(sample)
     result = simulation.simulate()
+    trafo = ba.FrameTrafo.ScatteringToQ(1.25916*angstrom, 0.13*deg)
+    res = trafo.transformedDatafield(result)
     bp.plt.figure()
-    bp.plot_datafield(result)
+    bp.plot_datafield(res)
     sample = get_sample_hemi()
     simulation = get_simulation(sample)
     result = simulation.simulate()
+    trafo = ba.FrameTrafo.ScatteringToQ(1.25916*angstrom, 0.13*deg)
+    res = trafo.transformedDatafield(result)
     bp.plt.figure()
-    bp.plot_datafield(result)
+    bp.plot_datafield(res)
     bp.plt.show()
