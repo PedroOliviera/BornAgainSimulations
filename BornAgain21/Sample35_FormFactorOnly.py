@@ -9,18 +9,18 @@ import numpy as np
 
 def get_sample(num_samples):
     material_PS = ba.RefractiveMaterial("PS", 2.50267703E-06, 2.46904652E-09)
-    material_P2VP = ba.RefractiveMaterial("P2VP", 30E-06, 2.46904652E-09)
+    material_P2VP = ba.RefractiveMaterial("P2VP", 3E-06, 2.46904652E-09)
     material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.04383115E-06, 7.84182177E-08) #7.644e-06
     material_SiO2 = ba.RefractiveMaterial("SiO2", 4.74631315E-06, 4.16025294E-08)
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
-    omega_order = 5*nm #9nm
-    spacing = 57*nm
+    #omega_order = 9*nm #9nm
+    #spacing = 50*nm
 
     # Minimal test — adjust file path as needed
     lineprofile_dir = r"C:\Users\Pedro\Data Transfer\Lineprofiles\lineProfiles_34_Big_OnePerParticle_2.txt"
 
-    Factor = 5
+    Factor = 3.1
     xc, yc = h_r.load_lineprofiles(lineprofile_dir)
     hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0)
 
@@ -29,29 +29,21 @@ def get_sample(num_samples):
     
     #########################################----SURFACE PARTICLES----################################################
     surface_layout = ba.ParticleLayout()
-    #for i in range(num_samples):
-    #    ff_PS = ba.HemiEllipsoid((diam_K[i]/Factor) * nm, (diam_K[i]/Factor) * nm, height_K[i] * nm)
-    #    particle_PS= ba.Particle(material_PS, ff_PS)
-    #    surface_layout.addParticle(particle_PS, weight_K[i])
-    ff_dot = ba.Sphere(0.1*nm)
-    particle_dot = ba.Particle(material_P2VP, ff_dot)
-    surface_layout.addParticle(particle_dot, 1)
+    for i in range(num_samples):
+        ff_PS = ba.HemiEllipsoid((diam_K[i]/Factor) * nm, (diam_K[i]/Factor) * nm, height_K[i] * nm)
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        surface_layout.addParticle(particle_PS, weight_K[i])
+    
+    # Interference Functions
+    #iff = ba.InterferenceRadialParacrystal(spacing, 250*nm)
+    #iff_pdf = ba.Profile1DGauss(omega_order)
+    
+    #iff.setProbabilityDistribution(iff_pdf)
+    
+    #iff.setKappa(1.5) #size-distribution model 
 
-    # Radial Interference Functions
-    iff = ba.InterferenceRadialParacrystal(spacing, 1000000*nm) #250
-    iff_pdf = ba.Profile1DGauss(omega_order)
-    iff.setProbabilityDistribution(iff_pdf)
-    iff.setKappa(1.5) #size-distribution model
-    # 
-    # 2D Paracrystal hexagonal
-    #lattice = ba.BasicLattice2D(spacing*nm, spacing*nm, 120*deg, 0) 
-    #iff = ba.Interference2DParacrystal(lattice, 0, 100000*nm, 100000*nm)
-    #iff.setIntegrationOverXi(True)
-    #iff_pdf = ba.Profile2DCauchy(omega_order*nm, omega_order*nm, 0)
-    #iff.setProbabilityDistributions(iff_pdf, iff_pdf)
-
-    surface_layout.setInterference(iff)
-    surface_layout.setTotalParticleSurfaceDensity(26500000000) #PLAY WITH THIS 0.0265
+    #surface_layout.setInterference(iff)
+    surface_layout.setTotalParticleSurfaceDensity(0.0265) #PLAY WITH THIS 0.0265
     
 
     #----------------Roughness---------------------------------------------
@@ -73,8 +65,7 @@ def get_sample(num_samples):
 
     # Define layers
     layer_vac = ba.Layer(material_Vacuum)
-    layer_PS_Top = ba.Layer(material_PS, 214.8/2*nm)
-    layer_PS_Bot = ba.Layer(material_PS, 214.8/2*nm)
+    layer_PS_Top = ba.Layer(material_PS, 214.8*nm)
     layer_PS_Top.addLayout(surface_layout)
     layer_SiO2 = ba.Layer(material_SiO2, 2*nm)
     layer_Si = ba.Layer(material_Si_Sub)
@@ -82,11 +73,10 @@ def get_sample(num_samples):
      # Define sample 
     sample = ba.MultiLayer()
     sample.addLayer(layer_vac)
-    sample.addLayer(layer_PS_Top)
-    sample.addLayer(layer_PS_Bot)
-    sample.addLayer(layer_SiO2)
-    #sample.addLayerWithTopRoughness(layer_PS_Top, roughness_PS)
-    #sample.addLayerWithTopRoughness(layer_SiO2, roughness_SiO2)
+    #sample.addLayer(layer_PS_Top)
+    #sample.addLayer(layer_SiO2)
+    sample.addLayerWithTopRoughness(layer_PS_Top, roughness_PS)
+    sample.addLayerWithTopRoughness(layer_SiO2, roughness_SiO2)
     sample.addLayer(layer_Si)
 
 
@@ -102,8 +92,8 @@ def main():
     realData_npArray = g.center_img(realData_npArray)
 
     region = [150, 155, 212, 212]
-    number_of_samples = 10
-    simulation_2D = g.get_simulation_2D(sample_model=get_sample(number_of_samples), detectorDistBeamtime= 'feb', angle = 0.13, beamIntensity = 8e12,ROI=region)
+    number_of_samples = 200
+    #simulation_2D = g.get_simulation_2D(sample_model=get_sample(number_of_samples), detectorDistBeamtime= 'feb', angle = 0.13, beamIntensity = 8e12,ROI=region)
     simulation_line = g.get_simulation_line(sample_model=get_sample(number_of_samples), detectorDistBeamtime='feb', angle_of_incidence= 0.13, center_horizontal_slice_value=0.22, center_vertical_slice_value= 0, number_slices=5)
     #simulation_2D = g2.get_simulation_2D(sample_model=g2.get_sampleTest(), detectorDistBeamtime= 'feb', angle = 0.1, beamIntensity = 8e12, ROI= region)
     result = simulation_line.simulate()

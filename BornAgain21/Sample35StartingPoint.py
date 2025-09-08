@@ -14,13 +14,13 @@ def get_sample(num_samples):
     material_SiO2 = ba.RefractiveMaterial("SiO2", 4.74631315E-06, 4.16025294E-08)
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
-    omega_order = 0.00001*nm #9nm
+    omega_order = 9*nm #9nm
     spacing = 50*nm
 
     # Minimal test — adjust file path as needed
     lineprofile_dir = r"C:\Users\Pedro\Data Transfer\Lineprofiles\lineProfiles_34_Big_OnePerParticle_2.txt"
 
-    Factor = 5
+    Factor = 3.1
     xc, yc = h_r.load_lineprofiles(lineprofile_dir)
     hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0)
 
@@ -29,23 +29,21 @@ def get_sample(num_samples):
     
     #########################################----SURFACE PARTICLES----################################################
     surface_layout = ba.ParticleLayout()
-    #for i in range(num_samples):
-    #    ff_PS = ba.HemiEllipsoid((diam_K[i]/Factor) * nm, (diam_K[i]/Factor) * nm, height_K[i] * nm)
-    #    particle_PS= ba.Particle(material_PS, ff_PS)
-    #    surface_layout.addParticle(particle_PS, weight_K[i])
-    ff_dot = ba.Sphere(0.1*nm)
-    particle_dot = ba.Particle(material_P2VP, ff_dot)
-    surface_layout.addParticle(particle_dot, 1)
+    for i in range(num_samples):
+        ff_PS = ba.HemiEllipsoid((diam_K[i]/Factor) * nm, (diam_K[i]/Factor) * nm, height_K[i] * nm)
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        surface_layout.addParticle(particle_PS, weight_K[i])
+    
     # Interference Functions
-    iff = ba.InterferenceRadialParacrystal(spacing, 1000000*nm) #250
+    iff = ba.InterferenceRadialParacrystal(spacing, 250*nm)
     iff_pdf = ba.Profile1DGauss(omega_order)
     
     iff.setProbabilityDistribution(iff_pdf)
     
-    #iff.setKappa(1.5) #size-distribution model 
+    iff.setKappa(1.5) #size-distribution model 
 
     surface_layout.setInterference(iff)
-    surface_layout.setTotalParticleSurfaceDensity(26500000000) #PLAY WITH THIS 0.0265
+    surface_layout.setTotalParticleSurfaceDensity(0.0265) #PLAY WITH THIS 0.0265
     
 
     #----------------Roughness---------------------------------------------
@@ -67,9 +65,8 @@ def get_sample(num_samples):
 
     # Define layers
     layer_vac = ba.Layer(material_Vacuum)
-    layer_PS_Top = ba.Layer(material_PS, 214.8/2*nm)
-    layer_PS_Bot = ba.Layer(material_PS, 214.8/2*nm)
-    layer_PS_Bot.addLayout(surface_layout)
+    layer_PS_Top = ba.Layer(material_PS, 214.8*nm)
+    layer_PS_Top.addLayout(surface_layout)
     layer_SiO2 = ba.Layer(material_SiO2, 2*nm)
     layer_Si = ba.Layer(material_Si_Sub)
 
@@ -77,7 +74,6 @@ def get_sample(num_samples):
     sample = ba.MultiLayer()
     sample.addLayer(layer_vac)
     sample.addLayer(layer_PS_Top)
-    sample.addLayer(layer_PS_Bot)
     sample.addLayer(layer_SiO2)
     #sample.addLayerWithTopRoughness(layer_PS_Top, roughness_PS)
     sample.addLayerWithTopRoughness(layer_SiO2, roughness_SiO2)
