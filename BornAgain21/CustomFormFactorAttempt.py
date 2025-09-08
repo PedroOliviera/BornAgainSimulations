@@ -9,11 +9,6 @@ import bornagain as ba
 from bornagain import ba_plot as bp, deg, angstrom, nm
 import math
 
-def sinc(x):
-    if abs(x) == 0:
-        return 1.
-    return cmath.sin(x)/x
-
 
 class CustomFormFactor(ba.IFormFactor):
     """

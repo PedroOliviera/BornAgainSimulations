@@ -59,7 +59,7 @@ def create_detector(detector_distance, resolution):
     )
     return detector
 
-def get_simulation_2D(sample_model, detectorDistBeamtime = 'feb', angle = None, beamIntensity = 1.3e12, ROI = None, divergence = False, resolution = False):
+def get_simulation_2D(sample_model, detectorDistBeamtime = 'feb', angle = None, beamIntensity = 1.3e12, ROI = None, divergence = False, resolution = False, oneThread = False):
     '''
     sample: getSample(P=stuff)
     P : Sample Parameter Variation
@@ -143,7 +143,7 @@ def beamStopMask(x1 = - 0.041 , y1 = - 0.2, x2 = 0.04292, y2 = 0.5935):
     print(mm_TOPRIGHT_x)
     print(mm_TOPRIGHT_y)
 
-def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, center_horizontal_slice_value, center_vertical_slice_value, number_slices, resolution = False, divergence = False):
+def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, center_horizontal_slice_value, center_vertical_slice_value, number_slices, resolution = False, divergence = False, oneThread = False):
     '''
     sample: getSample()
     P : Sample Parameter Variation
@@ -222,6 +222,10 @@ def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, 
     #simulation.detector().addMask(ba.Rectangle(mm_x1, ROI_y1, mm_x2, ROI_y2), False)
     #simulation.detector().addMask(ba.Rectangle(148.07181022335135, 140.59419621147006, 152.0184854930185, 177.91172274246256, False))
     
+    #For custom form factor disable multi-threading
+    if (oneThread):
+        simulation.options().setNumberOfThreads(1)
+
     '''
     for i in range(100,200):
         simulation.detector().addMask(ba.HorizontalLine(i), False)

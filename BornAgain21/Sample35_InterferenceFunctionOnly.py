@@ -44,10 +44,10 @@ def get_sample(num_samples):
     iff.setKappa(1.5) #size-distribution model
     # 
     # 2D Paracrystal hexagonal
-    #lattice = ba.BasicLattice2D(spacing*nm, spacing*nm, 120*deg, 0) 
+    #lattice = ba.BasicLattice2D(spacing, spacing, 120*deg, 0) 
     #iff = ba.Interference2DParacrystal(lattice, 0, 100000*nm, 100000*nm)
     #iff.setIntegrationOverXi(True)
-    #iff_pdf = ba.Profile2DCauchy(omega_order*nm, omega_order*nm, 0)
+    #iff_pdf = ba.Profile2DCauchy(omega_order, omega_order, 0)
     #iff.setProbabilityDistributions(iff_pdf, iff_pdf)
 
     surface_layout.setInterference(iff)
