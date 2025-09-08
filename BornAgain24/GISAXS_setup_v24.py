@@ -24,7 +24,7 @@ ypos_pix_guess = 2048
 
 
 # ----------------------------------------------------------
-flip_v = True                      # <<< True if v index grows downward (images). False if v grows upward.
+flip_v = None                     # <<< True if v index grows downward (images). False if v grows upward.
 
 # ---------------- core converters ----------------
 

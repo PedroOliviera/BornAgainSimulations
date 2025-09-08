@@ -108,7 +108,6 @@ def get_sample(approximation, p2vp_radius):
 
 
     for i in range(P1):
-        
         ff_PS = ba.SpheroidalSegment((diam_K[i]/2) * nm, height_K[i]/2 * nm, 0, height_K[i]/2 * nm)
         particle_PS= ba.Particle(material_PS, ff_PS)
         #surface_layout.addParticle(particle_PS, weight_K[i])
