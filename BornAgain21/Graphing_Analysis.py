@@ -268,7 +268,7 @@ def plot2D(
     plt.tight_layout()
     plt.show()
 
-def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_axes2=None):
+def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_axes2=None, xmin = float, xmax = float):
     """Inputs:
     vert_slice_q: will take max of this vert slice value and use for horizontal slice value
     data_npArrays: array of dataset to be compared
@@ -294,8 +294,8 @@ def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_
         # Now take horizontal slice through that maximum
         x2, y2 = g2.plot_slices(data, axesLimits=data_axes, horiz_slice=hor_slice_q)
         x2, y2 = g2.integrate_plt_slices(start = hor_slice_q - step, stop= hor_slice_q + step, data=data, axLim=data_axes, labelname=i, num=20, horiz_slice=True)
-        xmin = 0.00001#0.085
-        xmax = 1#0.137
+        #xmin = 0.085
+        #xmax = 0.137
         x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = xmin, x_max=xmax)
         #x2_norm, y2_norm = x2, y2
         

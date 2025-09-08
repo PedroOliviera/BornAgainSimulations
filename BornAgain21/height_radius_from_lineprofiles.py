@@ -309,73 +309,97 @@ def plot_first_profiles_with_fraction_markers(
     }
     return fig, axes, results
 
-
-def extract_hsub_and_dmin(x_cols: np.ndarray, y_cols: np.ndarray, frac: float = 0.2
-                          ) -> Tuple[np.ndarray, np.ndarray]:
+def extract_hsub_and_dmin(x_cols: np.ndarray,
+                              y_cols: np.ndarray,
+                              frac: float = 0.2,
+                              return_halves: bool = False
+                              ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    For each profile (column) returns:
-      hsub_nm: peak height above baseline, baseline = ½(min_L + min_R)
-      dx20_nm: full width at `frac` (default 0.2) of hsub above the baseline
-               i.e., distance between left/right x where y = baseline + frac*hsub
-
-    Notes:
-      - Uses first crossings moving outward from the peak on each side.
-      - Linear interpolation is used between samples for sub-pixel accuracy.
-      - If a crossing isn't found on either side, dx20 is NaN for that profile.
+    Per profile:
+      - hsub: peak height above the average of left/right minima (same as before)
+      - dxfracLR: side-aware fractional width. On each side, target level is:
+            y*_side = y_min_side + frac * (y_peak - y_min_side)
+        We find the first crossing from the peak toward that side's minimum and
+        linearly interpolate x*_L, x*_R. Width = |x*_R - x*_L|.
+      - If return_halves=True, also returns dxL and dxR (half-widths).
     """
     def _interp_cross(x, y, i, j, target):
         x1, x2 = float(x[i]), float(x[j])
         y1, y2 = float(y[i]), float(y[j])
         if y2 == y1:
-            return (x1 + x2) * 0.5
+            return 0.5 * (x1 + x2)
         t = (target - y1) / (y2 - y1)
         t = np.clip(t, 0.0, 1.0)
         return x1 + t * (x2 - x1)
 
-    hsub, dx20 = [], []
+    hsub, dxfrac, dxL_list, dxR_list = [], [], [], []
+
     for x, y in zip(x_cols.T, y_cols.T):
         m = np.isfinite(x) & np.isfinite(y)
         x, y = x[m], y[m]
         if y.size < 3:
-            hsub.append(np.nan); dx20.append(np.nan); continue
+            hsub.append(np.nan); dxfrac.append(np.nan)
+            if return_halves: dxL_list.append(np.nan); dxR_list.append(np.nan)
+            continue
 
-        p = int(np.nanargmax(y))  # peak index
-
-        # Baseline from minima to the left/right of the peak
+        p = int(np.nanargmax(y))
         idxL_min = int(np.nanargmin(y[:p+1]))
         idxR_min = int(p + np.nanargmin(y[p:]))
-        baseline = 0.5 * (float(y[idxL_min]) + float(y[idxR_min]))
-        h = float(y[p]) - baseline
+
+        y_peak = float(y[p])
+        yL, yR = float(y[idxL_min]), float(y[idxR_min])
+        baseline = 0.5 * (yL + yR)
+        h = y_peak - baseline
         hsub.append(h)
 
-        if not np.isfinite(h) or h <= 0.0:
-            dx20.append(np.nan); continue
+        # Side-specific targets
+        tL = yL + frac * (y_peak - yL)
+        tR = yR + frac * (y_peak - yR)
 
-        target = baseline + frac * h
+        # Guard: if peak isn't above either minimum, width is undefined
+        if not (np.isfinite(y_peak) and np.isfinite(yL) and np.isfinite(yR)) \
+           or (y_peak <= yL) or (y_peak <= yR):
+            dxfrac.append(np.nan)
+            if return_halves: dxL_list.append(np.nan); dxR_list.append(np.nan)
+            continue
 
-        # Left crossing (scan outward from the peak)
-        xL = np.nan
-        for i in range(p-1, -1, -1):
+        # Left crossing: search between peak and left minimum
+        xL_star = np.nan
+        start_i, stop_i = p-1, idxL_min  # inclusive stop via range(..., stop-1, -1)
+        for i in range(start_i, stop_i-1, -1):
             y_i, y_ip1 = y[i], y[i+1]
-            if (y_i - target) == 0:
-                xL = float(x[i]); break
-            if (y_i - target) * (y_ip1 - target) < 0 or (y_ip1 - target) == 0:
-                xL = _interp_cross(x, y, i, i+1, target)
-                break
+            if (y_i - tL) == 0:
+                xL_star = float(x[i]); break
+            if (y_i - tL) * (y_ip1 - tL) < 0 or (y_ip1 - tL) == 0:
+                xL_star = _interp_cross(x, y, i, i+1, tL); break
 
-        # Right crossing
-        xR = np.nan
-        for i in range(p, len(y)-1):
+        # Right crossing: search between peak and right minimum
+        xR_star = np.nan
+        for i in range(p, idxR_min):
             y_i, y_ip1 = y[i], y[i+1]
-            if (y_i - target) == 0:
-                xR = float(x[i]); break
-            if (y_i - target) * (y_ip1 - target) < 0 or (y_ip1 - target) == 0:
-                xR = _interp_cross(x, y, i, i+1, target)
-                break
+            if (y_i - tR) == 0:
+                xR_star = float(x[i]); break
+            if (y_i - tR) * (y_ip1 - tR) < 0 or (y_ip1 - tR) == 0:
+                xR_star = _interp_cross(x, y, i, i+1, tR); break
 
-        dx20.append(abs(xR - xL) if np.isfinite(xL) and np.isfinite(xR) else np.nan)
+        if np.isfinite(xL_star) and np.isfinite(xR_star):
+            width = abs(xR_star - xL_star)
+            dxfrac.append(width)
+            if return_halves:
+                x_p = float(x[p])
+                dxL_list.append(abs(x_p - xL_star))
+                dxR_list.append(abs(xR_star - x_p))
+        else:
+            dxfrac.append(np.nan)
+            if return_halves: dxL_list.append(np.nan); dxR_list.append(np.nan)
 
-    return np.asarray(hsub, float), np.asarray(dx20, float)
+    if return_halves:
+        return (np.asarray(hsub, float),
+                np.asarray(dxfrac, float),
+                np.asarray(dxL_list, float),
+                np.asarray(dxR_list, float))
+    else:
+        return np.asarray(hsub, float), np.asarray(dxfrac, float)
 
 
 # ========================= 2D QUANTILE GRID =========================
