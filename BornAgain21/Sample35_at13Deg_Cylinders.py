@@ -129,7 +129,7 @@ def get_sample(num_samples):
 
     #########################################----BURIED PARTICLES----################################################
     buried_layout = ba.ParticleLayout()
-    ff_P2VP = ba.Cylinder(24*nm, mid_layer_thickness)
+    ff_P2VP = ba.Cylinder(22*nm, mid_layer_thickness)
     particle = ba.Particle(material_P2VP, ff_P2VP)
     buried_layout.addParticle(particle, 1)
     #iff.setPositionVariance(2*nm)
