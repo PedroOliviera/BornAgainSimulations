@@ -10,6 +10,7 @@ import cmath
 from scipy.special import j0  # Bessel J0
 from scipy.integrate import quad
 import math
+from bornagain import R3
 
 class CustomFormFactor(ba.IFormFactor):
     """
@@ -80,20 +81,21 @@ class CustomFormFactor(ba.IFormFactor):
     def spanZ(self, rotation):
         return ba.Span(0, self.H)
 
-def get_sample(num_samples, r_P2VP):
+def get_sample(num_samples):
     material_PS = ba.RefractiveMaterial("PS", 2.50267703E-06, 2.46904652E-09)
-    material_P2VP = ba.RefractiveMaterial("P2VP", 2.51436745E-06, 2.35391329E-09)
+    material_P2VP = ba.RefractiveMaterial("P2VP", 2.751436745E-06, 2.35391329E-09)
     material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.04383115E-06, 7.84182177E-08) #7.644e-06
     material_SiO2 = ba.RefractiveMaterial("SiO2", 4.74631315E-06, 4.16025294E-08)
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
     omega_order = 4*nm #9nm
     spacing = 54*nm
-    
+    #h_P2VP = 30*nm
+    #r_P2VP = r_P2VP
     # Minimal test — adjust file path as needed
     lineprofile_dir =  r"C:\Users\Pedro\Data Transfer\Lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
 
-    Factor = 2
+    Factor = 1
     xc, yc = h_r.load_lineprofiles(lineprofile_dir)
     hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
 
@@ -118,14 +120,18 @@ def get_sample(num_samples, r_P2VP):
     surface_layout.setInterference(iff)
     surface_layout.setTotalParticleSurfaceDensity(0.0003) #PLAY WITH THIS 0.0265
 
+    # Define layer thickness
+    thickness = 214.8*nm
+    mid_layer_thickness = spacing
+    num_layers = int(thickness/mid_layer_thickness)
+    remainder_thickness = thickness - num_layers * mid_layer_thickness
+    top_layer_thickness, bot_layer_thickness = remainder_thickness / 2 , remainder_thickness / 2
+
     #########################################----BURIED PARTICLES----################################################
     buried_layout = ba.ParticleLayout()
-    polyDispersity_P2VP = r_P2VP*0.1
-    distr = ba.DistributionGaussian(r_P2VP*nm, polyDispersity_P2VP*nm)
-    for P2VP_radius in distr.distributionSamples():
-        ff_P2VP = ba.Sphere(P2VP_radius.value)
-        particle = ba.Particle(material_P2VP, ff_P2VP)
-        buried_layout.addParticle(particle, P2VP_radius.weight)
+    ff_P2VP = ba.Cylinder(24*nm, mid_layer_thickness)
+    particle = ba.Particle(material_P2VP, ff_P2VP)
+    buried_layout.addParticle(particle, 1)
     #iff.setPositionVariance(2*nm)
     buried_layout.setInterference(iff)
     buried_layout.setTotalParticleSurfaceDensity(0.0003)
@@ -146,20 +152,14 @@ def get_sample(num_samples, r_P2VP):
     corr = 10*nm
     sig = 0.2*nm
     roughness_SiO2 = ba.LayerRoughness(sig, hurst, corr)
-
-    # Define layers
-    thickness = 214.8*nm
-    mid_layer_thickness = spacing
-    num_layers = int(thickness/spacing)
-    remainder_thickness = thickness - num_layers * mid_layer_thickness
-    top_layer_thickness, bot_layer_thickness = remainder_thickness / 2 , remainder_thickness / 2
-
+    
+    #Add Layers
     layer_vac = ba.Layer(material_Vacuum)
     layer_PS_Top = ba.Layer(material_PS, top_layer_thickness)
     layer_PS_Top.addLayout(surface_layout)
     layer_PS_Mid = ba.Layer(material_PS, mid_layer_thickness)
-    layer_PS_Mid.addLayout(buried_layout)
     layer_PS_Bot = ba.Layer(material_PS, bot_layer_thickness)
+    layer_PS_Bot.addLayout(buried_layout)
     layer_SiO2 = ba.Layer(material_SiO2, 2*nm)
     layer_Si = ba.Layer(material_Si_Sub)
 
@@ -167,8 +167,7 @@ def get_sample(num_samples, r_P2VP):
     sample = ba.MultiLayer()
     sample.addLayer(layer_vac)
     sample.addLayerWithTopRoughness(layer_PS_Top, roughness_PS)
-    for i in range(num_layers):
-        sample.addLayer(layer_PS_Mid)
+    sample.addLayer(layer_PS_Mid)
     sample.addLayer(layer_PS_Bot)
     sample.addLayerWithTopRoughness(layer_SiO2, roughness_SiO2)
     sample.addLayer(layer_Si)
@@ -188,25 +187,21 @@ def main():
     region = [150, 155, 212, 212]
     number_of_samples = 10
     radius_P2VP = [18,19,20,21,22,23,24]
-    #simulation_2D = g.get_simulation_2D(sample_model=get_sample(number_of_samples), detectorDistBeamtime= 'feb', angle = 0.13, beamIntensity = 8e12,ROI=region,oneThread=False)
-    for radius in radius_P2VP:
-        #simulation_line = g.get_simulation_line(sample_model=get_sample(number_of_samples,r_P2VP=radius), detectorDistBeamtime='feb', angle_of_incidence= 0.13, center_horizontal_slice_value=0.22, center_vertical_slice_value= 0, number_slices=5,oneThread=False)
-        simulation_2D = g.get_simulation_2D(sample_model=get_sample(number_of_samples,r_P2VP=radius), detectorDistBeamtime= 'feb', angle = 0.13, beamIntensity = 8e12,ROI=region,oneThread=False)
-        result = simulation_2D.simulate()
-        simul_dat = result.extracted_field()
-        final_array = simul_dat.npArray()
-        save_filename = "tests_13deg_line_CosineRippleGauss_P2VPradius_2D_"+ str(radius) +"nm.npy"
-        np.save(save_filename, final_array)
+    
+    simulation_2D = g.get_simulation_2D(sample_model=get_sample(number_of_samples), detectorDistBeamtime= 'feb', angle = 0.13, beamIntensity = 8e12,ROI=region,oneThread=False)
+    result = simulation_2D.simulate()
+    simul_dat = result.extracted_field()
+    final_array = simul_dat.npArray()
+    save_filename = "tests_13deg_2D_cylinders.npy"
+    np.save(save_filename, final_array)
 
     simulationDataAxes = g.get_axes_limits(result, ba.Coords_QSPACE)
-    legendLabels = ["P2VP radius: " + str(radius) for radius in radius_P2VP]
-    data2D = []
-    for radius in radius_P2VP:
-        data2D.append(np.load("tests_13deg_line_CosineRippleGauss_P2VPradius_2D_"+ str(radius) +"nm.npy"))
+    legendLabels = ["Cylinders"]
+    data2D = np.load("tests_13deg_2D_cylinders.npy")
 
     graphing.plot2D(simulationData=data2D, simData_axes=simulationDataAxes, realData=realData_npArray, realDat_axes=realDat_axes_Feb, zlim=[22,70000000])
     vert_slice_q = 0.2
-    graphing.yonedaPlot(vert_slice_q, data2D, data_axes=simulationDataAxes, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb, xmin = 0.08, xmax = 0.2, labels=legendLabels) #, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb)
+    graphing.yonedaPlot(vert_slice_q, [data2D], data_axes=simulationDataAxes, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb, xmin = 0.08, xmax = 0.2, labels=legendLabels) #, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb)
     plt.show()
 def testProfiles():
     # Minimal test — adjust file path as needed

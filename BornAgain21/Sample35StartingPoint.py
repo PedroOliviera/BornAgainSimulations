@@ -14,18 +14,18 @@ def get_sample(num_samples):
     material_SiO2 = ba.RefractiveMaterial("SiO2", 4.74631315E-06, 4.16025294E-08)
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
-    omega_order = 1*nm #9nm
+    omega_order = 9*nm #9nm
     spacing = 50*nm
 
     # Minimal test — adjust file path as needed
-    lineprofile_dir =  r"C:\Users\Pedro\Data Transfer\Lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+    lineprofile_dir = r"C:\Users\Pedro\Data Transfer\Lineprofiles\lineProfiles_34_Big_OnePerParticle_2.txt"
 
-    Factor = 1
+    Factor = 3.1
     xc, yc = h_r.load_lineprofiles(lineprofile_dir)
-    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.3)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0)
 
     diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
-    h_r.visualize_kmedoids(dmin_nm/Factor, hsub_nm, diam_K/Factor, height_K, labels, weight_rep=weight_K)
+    #h_r.visualize_kmedoids(dmin_nm/Factor, hsub_nm, diam_K/Factor, height_K, labels, weight_rep=weight_K)
     
     #########################################----SURFACE PARTICLES----################################################
     surface_layout = ba.ParticleLayout()
@@ -35,15 +35,15 @@ def get_sample(num_samples):
         surface_layout.addParticle(particle_PS, weight_K[i])
     
     # Interference Functions
-    #iff = ba.InterferenceRadialParacrystal(spacing, 10000*nm)
-    #iff_pdf = ba.Profile1DGauss(omega_order)
+    iff = ba.InterferenceRadialParacrystal(spacing, 250*nm)
+    iff_pdf = ba.Profile1DGauss(omega_order)
     
-    #iff.setProbabilityDistribution(iff_pdf)
+    iff.setProbabilityDistribution(iff_pdf)
     
-    #iff.setKappa(1.5) #size-distribution model 
+    iff.setKappa(1.5) #size-distribution model 
 
-    #surface_layout.setInterference(iff)
-    #surface_layout.setTotalParticleSurfaceDensity(0.0265) #PLAY WITH THIS 0.0265
+    surface_layout.setInterference(iff)
+    surface_layout.setTotalParticleSurfaceDensity(0.0265) #PLAY WITH THIS 0.0265
     
 
     #----------------Roughness---------------------------------------------
@@ -107,7 +107,8 @@ def main():
 
     graphing.plot2D(simulationData=data2D, simData_axes=simulationDataAxes, realData=realData_npArray, realDat_axes=realDat_axes_Feb, zlim=[22,70000000])
     vert_slice_q = 0.2
-    graphing.yonedaPlot(vert_slice_q, [data2D], data_axes=simulationDataAxes, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb, xmin = 0.1, xmax = 0.2) #, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb)
+    graphing.yonedaPlot(vert_slice_q, [data2D], data_axes=simulationDataAxes, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb, xmin = 0.1, xmax = 0.2, labels=['Starting Point']) #, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb)
+    plt.show()
 
 def testProfiles():
     # Minimal test — adjust file path as needed

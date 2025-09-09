@@ -80,7 +80,7 @@ class CustomFormFactor(ba.IFormFactor):
     def spanZ(self, rotation):
         return ba.Span(0, self.H)
 
-def get_sample(num_samples, r_P2VP):
+def get_sample(num_samples, inter_dist):
     material_PS = ba.RefractiveMaterial("PS", 2.50267703E-06, 2.46904652E-09)
     material_P2VP = ba.RefractiveMaterial("P2VP", 2.51436745E-06, 2.35391329E-09)
     material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.04383115E-06, 7.84182177E-08) #7.644e-06
@@ -88,8 +88,9 @@ def get_sample(num_samples, r_P2VP):
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
     omega_order = 4*nm #9nm
-    spacing = 54*nm
-    
+    spacing = inter_dist*nm
+    surface_spacing = 50*nm
+    r_P2VP = 24*nm
     # Minimal test — adjust file path as needed
     lineprofile_dir =  r"C:\Users\Pedro\Data Transfer\Lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
 
@@ -108,13 +109,10 @@ def get_sample(num_samples, r_P2VP):
         surface_layout.addParticle(particle_PS, weight_K[i])
     
     # Radial Interference Functions
-    iff = ba.InterferenceRadialParacrystal(spacing, 450*nm)
+    iff = ba.InterferenceRadialParacrystal(surface_spacing, 10000*nm)
     iff_pdf = ba.Profile1DGauss(omega_order)
-    
     iff.setProbabilityDistribution(iff_pdf)
-    
     iff.setKappa(1.5) #size-distribution model 
-
     surface_layout.setInterference(iff)
     surface_layout.setTotalParticleSurfaceDensity(0.0003) #PLAY WITH THIS 0.0265
 
@@ -126,8 +124,13 @@ def get_sample(num_samples, r_P2VP):
         ff_P2VP = ba.Sphere(P2VP_radius.value)
         particle = ba.Particle(material_P2VP, ff_P2VP)
         buried_layout.addParticle(particle, P2VP_radius.weight)
-    #iff.setPositionVariance(2*nm)
-    buried_layout.setInterference(iff)
+
+    # Radial Interference Functions
+    buried_iff = ba.InterferenceRadialParacrystal(spacing, 450*nm)
+    buried_iff_pdf = ba.Profile1DGauss(omega_order)
+    buried_iff.setProbabilityDistribution(buried_iff_pdf)
+    buried_iff.setKappa(1.5) #size-distribution model 
+    #buried_layout.setInterference(buried_iff)
     buried_layout.setTotalParticleSurfaceDensity(0.0003)
 
     #----------------Roughness---------------------------------------------
@@ -187,24 +190,23 @@ def main():
 
     region = [150, 155, 212, 212]
     number_of_samples = 10
-    radius_P2VP = [18,19,20,21,22,23,24]
+    buried_spacing = [50, 52, 54, 56, 58, 60]
     #simulation_2D = g.get_simulation_2D(sample_model=get_sample(number_of_samples), detectorDistBeamtime= 'feb', angle = 0.13, beamIntensity = 8e12,ROI=region,oneThread=False)
-    for radius in radius_P2VP:
-        #simulation_line = g.get_simulation_line(sample_model=get_sample(number_of_samples,r_P2VP=radius), detectorDistBeamtime='feb', angle_of_incidence= 0.13, center_horizontal_slice_value=0.22, center_vertical_slice_value= 0, number_slices=5,oneThread=False)
-        simulation_2D = g.get_simulation_2D(sample_model=get_sample(number_of_samples,r_P2VP=radius), detectorDistBeamtime= 'feb', angle = 0.13, beamIntensity = 8e12,ROI=region,oneThread=False)
-        result = simulation_2D.simulate()
+    for spacing in buried_spacing:
+        simulation_line = g.get_simulation_line(sample_model=get_sample(number_of_samples,inter_dist=spacing), detectorDistBeamtime='feb', angle_of_incidence= 0.13, center_horizontal_slice_value=0.22, center_vertical_slice_value= 0, number_slices=5,oneThread=False)
+        result = simulation_line.simulate()
         simul_dat = result.extracted_field()
         final_array = simul_dat.npArray()
-        save_filename = "tests_13deg_line_CosineRippleGauss_P2VPradius_2D_"+ str(radius) +"nm.npy"
+        save_filename = "tests_13deg_line_CosineRippleGauss_P2VPspacing_"+ str(spacing) +"nm.npy"
         np.save(save_filename, final_array)
 
     simulationDataAxes = g.get_axes_limits(result, ba.Coords_QSPACE)
-    legendLabels = ["P2VP radius: " + str(radius) for radius in radius_P2VP]
+    legendLabels = ["P2VP spacing: " + str(inter_dist) for inter_dist in buried_spacing]
     data2D = []
-    for radius in radius_P2VP:
-        data2D.append(np.load("tests_13deg_line_CosineRippleGauss_P2VPradius_2D_"+ str(radius) +"nm.npy"))
+    for spacing in buried_spacing:
+        data2D.append(np.load("tests_13deg_line_CosineRippleGauss_P2VPspacing_"+ str(spacing) +"nm.npy"))
 
-    graphing.plot2D(simulationData=data2D, simData_axes=simulationDataAxes, realData=realData_npArray, realDat_axes=realDat_axes_Feb, zlim=[22,70000000])
+    #graphing.plot2D(simulationData=data2D, simData_axes=simulationDataAxes, realData=realData_npArray, realDat_axes=realDat_axes_Feb, zlim=[22,70000000])
     vert_slice_q = 0.2
     graphing.yonedaPlot(vert_slice_q, data2D, data_axes=simulationDataAxes, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb, xmin = 0.08, xmax = 0.2, labels=legendLabels) #, data2_npArray=realData_npArray, data_axes2=realDat_axes_Feb)
     plt.show()
