@@ -164,16 +164,19 @@ def plot_first_profiles_with_fraction_markers(
     """
     Plot the first N (or specified) line profiles and mark:
       • peak (xP, yP)
-      • substrate baseline = ½(min_L + min_R)
-      • target = baseline + frac * (yP - baseline)
-      • left/right crossing xL/xR at the target
-      • Δx = xR - xL annotation (if both crossings exist)
+      • baseline = ½(min_L + min_R)
+      • SIDE-AWARE targets:
+            tL = y_L + frac * (yP - y_L)
+            tR = y_R + frac * (yP - y_R)
+      • left/right crossings (xL*, tL) and (xR*, tR) via linear interpolation
+      • Δx = |xR* − xL*| drawn as a horizontal bracket at ymid = (tL + tR)/2
 
     Returns:
       fig, axes, results_dict
-        where results_dict has keys:
-          'xL', 'xR', 'xP', 'yP', 'baseline', 'hsub', 'dx_frac', 'target'
-          (each is a list aligned with plotted profiles)
+        results_dict keys:
+          'xL', 'xR', 'xP', 'yP', 'baseline', 'hsub', 'dx_frac',
+          'targetL', 'targetR', 'dxL', 'dxR'
+        (each a list aligned with plotted profiles)
     """
 
     def _interp_cross(x, y, i, j, target):
@@ -200,7 +203,8 @@ def plot_first_profiles_with_fraction_markers(
         axes = [axes]
 
     out_xL, out_xR, out_xP, out_yP = [], [], [], []
-    out_base, out_hsub, out_dx, out_target = [], [], [], []
+    out_base, out_hsub, out_dx = [], [], []
+    out_tL, out_tR, out_dxL, out_dxR = [], [], [], []
 
     for ax, j in zip(axes, indices):
         x = x_cols[:, j]
@@ -215,75 +219,101 @@ def plot_first_profiles_with_fraction_markers(
             out_xL.append(np.nan); out_xR.append(np.nan)
             out_xP.append(np.nan); out_yP.append(np.nan)
             out_base.append(np.nan); out_hsub.append(np.nan)
-            out_dx.append(np.nan); out_target.append(np.nan)
+            out_dx.append(np.nan); out_tL.append(np.nan); out_tR.append(np.nan)
+            out_dxL.append(np.nan); out_dxR.append(np.nan)
             continue
 
         # Peak
         p = int(np.nanargmax(y))
         xP, yP = float(x[p]), float(y[p])
 
-        # Baseline from minima around the peak
+        # Minima around the peak
         idxL_min = int(np.nanargmin(y[:p+1]))
         idxR_min = int(p + np.nanargmin(y[p:]))
-        baseline = 0.5 * (float(y[idxL_min]) + float(y[idxR_min]))
+        yL, yR = float(y[idxL_min]), float(y[idxR_min])
+
+        # Baseline and peak-above-baseline
+        baseline = 0.5 * (yL + yR)
         hsub = yP - baseline
-        target = baseline + frac * max(hsub, 0.0)
 
-        # Left crossing
-        xL = np.nan
-        for i in range(p-1, -1, -1):
-            y_i, y_ip1 = y[i], y[i+1]
-            if (y_i - target) == 0:
-                xL = float(x[i]); break
-            if (y_i - target) * (y_ip1 - target) < 0 or (y_ip1 - target) == 0:
-                xL = _interp_cross(x, y, i, i+1, target)
-                break
+        # Side-aware targets
+        tL = yL + frac * (yP - yL)
+        tR = yR + frac * (yP - yR)
 
-        # Right crossing
-        xR = np.nan
-        for i in range(p, len(y)-1):
-            y_i, y_ip1 = y[i], y[i+1]
-            if (y_i - target) == 0:
-                xR = float(x[i]); break
-            if (y_i - target) * (y_ip1 - target) < 0 or (y_ip1 - target) == 0:
-                xR = _interp_cross(x, y, i, i+1, target)
-                break
+        # Guard: undefined width if peak not above either minimum
+        if not (np.isfinite(yP) and np.isfinite(yL) and np.isfinite(yR)) or (yP <= yL) or (yP <= yR):
+            xL_star = np.nan; xR_star = np.nan
+            dx_val = np.nan; dxL = np.nan; dxR = np.nan
+        else:
+            # Left crossing: search between peak and left minimum (from peak outward)
+            xL_star = np.nan
+            for i in range(p-1, idxL_min-1, -1):
+                y_i, y_ip1 = y[i], y[i+1]
+                if (y_i - tL) == 0:
+                    xL_star = float(x[i]); break
+                if (y_i - tL) * (y_ip1 - tL) < 0 or (y_ip1 - tL) == 0:
+                    xL_star = _interp_cross(x, y, i, i+1, tL); break
 
-        dx_val = (xR - xL) if (np.isfinite(xL) and np.isfinite(xR)) else np.nan
+            # Right crossing: search between peak and right minimum (from peak outward)
+            xR_star = np.nan
+            for i in range(p, idxR_min):
+                y_i, y_ip1 = y[i], y[i+1]
+                if (y_i - tR) == 0:
+                    xR_star = float(x[i]); break
+                if (y_i - tR) * (y_ip1 - tR) < 0 or (y_ip1 - tR) == 0:
+                    xR_star = _interp_cross(x, y, i, i+1, tR); break
+
+            if np.isfinite(xL_star) and np.isfinite(xR_star):
+                dx_val = abs(xR_star - xL_star)
+                dxL = abs(xP - xL_star)
+                dxR = abs(xR_star - xP)
+            else:
+                dx_val = np.nan; dxL = np.nan; dxR = np.nan
 
         # ---- plotting
         ax.plot(x, y, lw=1.4, label=f"Profile {j+1}")
-        ax.axhline(target, ls="--", lw=1.0, color="tab:gray", alpha=0.8, label=f"{int(frac*100)}% of h_sub")
+
+        # Optional baseline
+        if show_baseline and np.isfinite(baseline):
+            ax.axhline(baseline, ls=":", lw=0.9, color="tab:purple", alpha=0.7, label="baseline")
 
         # Peak marker
         ax.plot([xP], [yP], marker="o", ms=5, color="tab:red", label="peak")
 
-        # Left/right markers
-        if np.isfinite(xL):
-            ax.plot([xL], [target], marker="s", ms=5, color="tab:blue", label="left cross")
-        if np.isfinite(xR):
-            ax.plot([xR], [target], marker="^", ms=5, color="tab:green", label="right cross")
+        # Side-aware target lines (full-width for visibility)
+        if np.isfinite(tL):
+            ax.axhline(tL, ls="--", lw=1.0, color="tab:gray", alpha=0.8,
+                       label=f"L {int(frac*100)}%→peak")
+        if np.isfinite(tR):
+            ax.axhline(tR, ls="--", lw=1.0, color="tab:gray", alpha=0.6,
+                       label=f"R {int(frac*100)}%→peak")
 
-        # Δx segment + label
+        # Left/right markers at their own target levels
+        if np.isfinite(xL_star) and np.isfinite(tL):
+            ax.plot([xL_star], [tL], marker="s", ms=5, color="tab:blue", label="left cross")
+        if np.isfinite(xR_star) and np.isfinite(tR):
+            ax.plot([xR_star], [tR], marker="^", ms=5, color="tab:green", label="right cross")
+
+        # Δx bracket drawn at ymid between the two target levels
         if np.isfinite(dx_val):
-            ax.plot([xL, xR], [target, target], lw=1.2, color="k", alpha=0.8)
-            if annotate_dx:
-                ax.text((xL + xR) / 2.0, target,
-                        f"Δx={dx_val:.1f} nm",
-                        ha="center", va="bottom", fontsize=9)
-
-        if show_baseline:
-            ax.axhline(baseline, ls=":", lw=0.9, color="tab:purple", alpha=0.7, label="baseline")
+            ymid = 0.5 * (tL + tR) if np.isfinite(tL) and np.isfinite(tR) else (tL if np.isfinite(tL) else tR)
+            if np.isfinite(ymid):
+                ax.plot([xL_star, xR_star], [ymid, ymid], lw=1.2, color="k", alpha=0.8)
+                if annotate_dx:
+                    ax.text((xL_star + xR_star) / 2.0, ymid,
+                            f"Δx={dx_val:.1f} nm",
+                            ha="center", va="bottom", fontsize=9)
 
         ax.set_title(f"Profile {j+1}")
         ax.set_ylabel("Height (nm)")
         ax.grid(alpha=0.25)
 
         # collect outputs
-        out_xL.append(xL); out_xR.append(xR)
+        out_xL.append(xL_star); out_xR.append(xR_star)
         out_xP.append(xP); out_yP.append(yP)
         out_base.append(baseline); out_hsub.append(hsub)
-        out_dx.append(dx_val); out_target.append(target)
+        out_dx.append(dx_val); out_tL.append(tL); out_tR.append(tR)
+        out_dxL.append(dxL); out_dxR.append(dxR)
 
         # deduplicate legend entries per subplot
         handles, labels = ax.get_legend_handles_labels()
@@ -304,10 +334,15 @@ def plot_first_profiles_with_fraction_markers(
         "yP": out_yP,
         "baseline": out_base,
         "hsub": out_hsub,
-        "dx_frac": out_dx,
-        "target": out_target,
+        "dx_frac": out_dx,      # side-aware width (|xR* - xL*|)
+        "targetL": out_tL,
+        "targetR": out_tR,
+        "dxL": out_dxL,         # half-widths (optional asymmetry diagnostics)
+        "dxR": out_dxR,
     }
     return fig, axes, results
+
+
 
 def extract_hsub_and_dmin(x_cols: np.ndarray,
                               y_cols: np.ndarray,
