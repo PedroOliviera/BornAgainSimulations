@@ -115,10 +115,9 @@ def testProfiles():
     figs, pages = h_r.plot_profiles_in_pages(
     x_cols, y_cols,
     total_plots=15,
-    frac = 0.8,
+    frac = 0.0,
     per_fig=3,
-    select="random",
-    seed=123
+    select="first"    
     )
     plt.show()
-main()
+testProfiles()
