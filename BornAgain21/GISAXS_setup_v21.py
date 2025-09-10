@@ -327,8 +327,6 @@ def plot_slices(arrayData, axesLimits, horiz_slice = None, vert_slice = None, de
             xindex_high = find_nearest(x, desiredRange[1])
             x = x[xindex_low:xindex_high]
             y = y[xindex_low:xindex_high]
-            if(normalize):
-                y = normalize_array(y)
         
         else:
             y = arrayData[:,xindex]
@@ -353,14 +351,9 @@ def plot_slices(arrayData, axesLimits, horiz_slice = None, vert_slice = None, de
             xindex_high = find_nearest(x, desiredRange[1])
             x = x[xindex_low:xindex_high]
             y = y[xindex_low:xindex_high]
-            if(normalize):
-                y = hori_normalize_array(y)
 
         else:
             y = arrayData[yindex,:]
-            if(normalize):
-                y = hori_normalize_array(y)
-            x = np.linspace(axesLimits[0], axesLimits[1], y.size)
             
         return x , y
 
