@@ -198,7 +198,7 @@ def run_fitting_step2(i):
     print(finalP)
 
 def run_fitting_step3(i):
-    realData_npArray, realDat_axes_Feb = g.loadSim("sample35_13deg.npz")
+    realData_npArray, realDat_axes_Feb = g.loadSim(r"C:\Users\Pedro\Data Transfer\Sample_35_3secIntegration\sample35_13deg.npz")
     fit_objective = ba.FitObjective()
 
     P = ba.Parameters()
@@ -216,7 +216,7 @@ def run_fitting_step3(i):
 
     minimizer = ba.Minimizer()
     #minimizer.setMinimizer('Genetic')
-    minimizer.setMinimizer("Minuit2", "Migrad", "MaxFunctionCalls=15;Strategy=2")
+    minimizer.setMinimizer("Minuit2", "Migrad", "MaxFunctionCalls=1;Strategy=2")
     result = minimizer.minimize(fit_objective.evaluate, P)
     fit_objective.finalize(result)
     plt.show()
@@ -224,7 +224,7 @@ def run_fitting_step3(i):
     finalP = {r.name(): r.value for r in result.parameters()}
     print(finalP)
 
-    final_result = get_sim_fitting_step2(finalP).simulate()
+    final_result = get_sim_fitting_step3(finalP).simulate()
     simul_dat = final_result.extracted_field()
     final_array = simul_dat.npArray()
     save_filename = "test_" + str(i) + ".npz"
