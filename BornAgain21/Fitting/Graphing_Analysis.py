@@ -72,8 +72,8 @@ def normalize_by_first_peak(
 def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index):
     ax.set_title(f'Linecut {ROMAN_NUMERALS[linecut_index]}')
 
-    horizontal_slice_1 = qy + 0.05
-    horizontal_slice_2 = qy - 0.05
+    horizontal_slice_1 = qy + 0.0001
+    horizontal_slice_2 = qy - 0.0001
 
     if simulation_data is not None:
         x, y = g2.integrate_plt_slices(
@@ -82,7 +82,7 @@ def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_e
             data=simulation_data,
             axLim=axes_sim,
             labelname="Simulation",
-            num=10,
+            num=1,
             horiz_slice=True
         )
         ax.plot(x, y, label=labels[0])
@@ -94,7 +94,7 @@ def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_e
             data=experimental_data,
             axLim=axes_exp,
             labelname="Experiment",
-            num=10,
+            num=1,
             horiz_slice=True
         )
         ax.plot(x, y, label=labels[1])
@@ -109,8 +109,8 @@ def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_e
 def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index):
     ax.set_title(f'Linecut {ROMAN_NUMERALS[linecut_index]}')
 
-    vertical_slice_1 = qz + 0.05
-    vertical_slice_2 = qz - 0.05
+    vertical_slice_1 = qz + 0.0001
+    vertical_slice_2 = qz - 0.0001
 
     x_data_all, y_data_all = [], []
 
@@ -121,7 +121,7 @@ def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_e
             data=simulation_data,
             axLim=axes_sim,
             labelname="Simulation",
-            num=10,
+            num=1,
             vert_slice=True
         )
         ax.plot(x, y, label=labels[0])
@@ -135,7 +135,7 @@ def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_e
             data=experimental_data,
             axLim=axes_exp,
             labelname="Experiment",
-            num=10,
+            num=1,
             vert_slice=True
         )
         ax.plot(x, y, label=labels[1])

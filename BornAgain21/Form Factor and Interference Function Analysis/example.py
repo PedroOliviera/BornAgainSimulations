@@ -91,18 +91,18 @@ def main():
     realData_npArray = g.center_img2(realData_npArray)
 
     region = [150, 155, 212, 212]
-    number_of_samples = 10#50
+    number_of_samples = 1000#50
     simulation_2D = g.get_simulation_2D(sample_model=get_sample(number_of_samples), detectorDistBeamtime= 'feb', angle = 0.13, beamIntensity = 8e12,ROI=region)
     #simulation_line = g.get_simulation_line(sample_model=get_sample(number_of_samples), detectorDistBeamtime='feb', angle_of_incidence= 0.13, center_horizontal_slice_value=0.22, center_vertical_slice_value= 0, number_slices=5)
     #simulation_2D = g2.get_simulation_2D(sample_model=g2.get_sampleTest(), detectorDistBeamtime= 'feb', angle = 0.1, beamIntensity = 8e12, ROI= region)
     result = simulation_2D.simulate()
     simul_dat = result.extracted_field()
     final_array = simul_dat.npArray()
-    save_filename = "tests_10deg_line.npy"
+    save_filename = "test.npy"
     np.save(save_filename, final_array)
 
     simulationDataAxes = g.get_axes_limits(result, ba.Coords_QSPACE)
-    data2D = np.load("tests_10deg_line.npy")
+    data2D = np.load("test.npy")
 
     graphing.plot2D(simulationData=data2D, simData_axes=simulationDataAxes, realData=realData_npArray, realDat_axes=realDat_axes_Feb, zlim=[22,70000000])
     vert_slice_q = 0.1
@@ -120,4 +120,4 @@ def testProfiles():
     select="first"    
     )
     plt.show()
-testProfiles()
+main()

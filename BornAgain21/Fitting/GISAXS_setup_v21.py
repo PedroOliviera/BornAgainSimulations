@@ -14,6 +14,7 @@ import os
 from scipy.ndimage import shift, rotate
 import json
 import datetime as dt
+import json
 
 wavelength = 1.25916*ba.angstrom
 
@@ -35,38 +36,53 @@ def get_timestamp(prefer_internet=True) -> dt.datetime:
     tz = dt.datetime.now().astimezone().tzinfo
     return dt.datetime.now(tz=tz)
 
-def saveSim(save_name: str,
-            sim2d: np.ndarray,
-            axes_limits):
+def _jsonify_params(d):
+    """Make dict JSON-safe (handles numpy scalars/arrays)."""
+    def py(v):
+        if isinstance(v, np.generic):   return v.item()
+        if isinstance(v, np.ndarray):   return v.tolist()
+        if isinstance(v, (list, tuple)):return [py(x) for x in v]
+        if isinstance(v, dict):         return {str(k): py(v2) for k, v2 in v.items()}
+        return v
+    return {str(k): py(v) for k, v in d.items()}
+
+def saveSim(save_name: str, sim2d: np.ndarray, axes_limits, params: dict | None = None):
+
     date = get_timestamp().isoformat()
     axes = np.asarray(axes_limits, dtype=np.float64)
 
-    #SAVE
-    np.savez(save_name, sim=sim2d, saved_at = date, axes_limits=axes)
+    payload = {
+        "sim": sim2d,
+        "axes_limits": axes,
+        "saved_at": date
+    }
+    if params is not None:
+        payload["params_json"] = json.dumps(_jsonify_params(params), separators=(",", ":"))
 
-def loadSim(path: str, return_date: bool = False):
+    np.savez(save_name, **payload)
+
+def loadSim(path: str, return_date: bool = False, return_params: bool = False):
     """
-    Load a simulation saved with saveSim().
-    Returns (sim2d, axes_limits) or (sim2d, axes_limits, saved_at) if return_date=True.
+    Load data saved by saveSim().
+    Returns:
+      (sim2d, axes)
+      + saved_at (str) if return_date=True
+      + params (dict or None) if return_params=True
     """
     with np.load(path, allow_pickle=False) as f:
-        sim = f["sim"]                       # 2D array
-        axes = f["axes_limits"]              # shape (4,), float64
-        if return_date:
-            # 'saved_at' is a 0-d np.str_ array; .item() gives a Python str
-            saved_at = f.get("saved_at")
-            saved_at = saved_at.item() if saved_at is not None else None
-            return sim, axes, saved_at
-    return sim, axes
+        sim   = f["sim"]
+        axes  = f["axes_limits"]
+        out = [sim, axes]
 
-def detectorQtoMM(beamTime, SimulationQspace):
-    '''Converts desired simulation Qspace to real space detector area'''
-    DecFullQspace = [-2.446074535755995, 2.446074535755995, -2.4460745357559945, 2.4460745357559954] #
-    FebFullQspace = np.array([-3.1895200744655168, 3.1895200744655168, -3.1895200744655163, 3.189520074465517]) # the full qspace measured by detector in feb beamtime
-    detector_realSpace = np.array([300, 300, 300, 300])
-    if beamTime.lower() == 'feb':
-        DesiredRealSpace = SimulationQspace * ( detector_realSpace / FebFullQspace ) 
-    return DesiredRealSpace
+        if return_date:
+            saved_at_arr = f.get("saved_at")
+            out.append(saved_at_arr.item() if saved_at_arr is not None else None)
+
+        if return_params:
+            pj = f.get("params_json")
+            out.append(json.loads(str(pj)) if pj is not None else None)
+
+    return tuple(out)
 
 def create_detector(detector_distance, resolution):
     """
@@ -130,13 +146,16 @@ def get_simulation_2D(sample_model, detectorDistBeamtime = 'feb', angle = None, 
     simulation.detector().addMask(ba.Rectangle(148.07181022335135, 140.59419621147006, 152.0184854930185, 177.91172274246256, False))
     #simulation.detector().setRegionOfInterest(151.41087056827945, 154.70290189426495, 210, 210)
     #simulation.detector().setRegionOfInterest(148.07181022335135,140.59419621147006, 197.0290189426496, 177.91172274246256)
-    simulation.detector().setRegionOfInterest(120, 155, 180, 210)
+    
+    
+    
     if ROI is not(None):
         simulation.detector().setRegionOfInterest(ROI[0], ROI[1], ROI[2], ROI[3])
-    
+    else:
+        simulation.detector().setRegionOfInterest(120, 155, 180, 210)
 
-    if (oneThread):
-        simulation.options().setNumberOfThreads(1)
+    #if (oneThread):
+    #    simulation.options().setNumberOfThreads(1)
 
     
 
@@ -176,7 +195,7 @@ def beamStopMask(x1 = - 0.041 , y1 = - 0.2, x2 = 0.04292, y2 = 0.5935):
     print(mm_TOPRIGHT_x)
     print(mm_TOPRIGHT_y)
 
-def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, center_horizontal_slice_values, center_vertical_slice_values, number_slices, beamIntensity = 8e12, resolution = False, divergence = False, oneThread = False):
+def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, center_horizontal_slice_values, center_vertical_slice_values, number_slices, ROI = [140,150,300,300] , beamIntensity = 8e12, resolution = False, divergence = False, oneThread = False):
     '''
     sample: getSample()
     P : Sample Parameter Variation
@@ -186,10 +205,11 @@ def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, 
     center_horizontal_slice_value: center Qy value that is simulated
     number_slices: number of horizontal slices simulated on either side of center (total slice 1 +  2 * n, where n is this value)
     '''
-    ROI_x1 = 120 #152 
-    ROI_x2 = 180 #175
-    ROI_y1 = 155 #150
-    ROI_y2 = 210 #205
+
+    ROI_x1 = ROI[0] 
+    ROI_x2 = ROI[2] 
+    ROI_y1 = ROI[1]
+    ROI_y2 = ROI[3] 
 
     if (detectorDistBeamtime == 'feb'):
         detectorDist = 2337.126
@@ -231,7 +251,7 @@ def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, 
     simulation.detector().maskAll()
 
     for horizontal_slice_value in center_horizontal_slice_values:
-        q_dist_y = horizontal_slice_value - axesLimits[0]
+        q_dist_y = horizontal_slice_value - axesLimits[0] - 0.003
         mm_center_y = q_dist_y * q_to_mm_ConversionFactor_y
         mm_y2 = mm_center_y + number_slices * rayonix_pixel_size
         mm_y1 = mm_center_y - number_slices * rayonix_pixel_size
@@ -261,6 +281,113 @@ def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, 
     
     return simulation
 
+def get_simulation_line_step2(sample_model, detectorDistBeamtime, angle_of_incidence, center_horizontal_slice_values, center_vertical_slice_values, number_slices, horizontal_bounds, vertical_bounds, beamIntensity = 8e12, resolution = False, divergence = False, oneThread = False):
+    '''
+    sample: getSample()
+    P : Sample Parameter Variation
+    A : simulation parameter (angle, etc.)
+    detectorDistBeamtime: detector distance - can be either Dec or Feb
+    angle: angle of incidence
+    center_horizontal_slice_value: center Qy value that is simulated
+    number_slices: number of horizontal slices simulated on either side of center (total slice 1 +  2 * n, where n is this value)
+    '''
+    ROI_x1 = 140 #120 
+    ROI_x2 = 300#180 
+    ROI_y1 = 150#155 
+    ROI_y2 = 300#210 
+
+    if (detectorDistBeamtime == 'feb'):
+        detectorDist = 2337.126
+        axesLimits = [-3.1895200744655168, 3.1895200744655168, -3.1895200744655163, 3.189520074465517]
+    elif (detectorDistBeamtime == 'dec'):
+        detectorDist = 3052.624
+        axesLimits = [-2.446074535755995, 2.446074535755995, -2.4460745357559945, 2.4460745357559954]
+
+    sample = sample_model
+
+    alpha_i = angle_of_incidence*ba.deg
+
+    # Beam
+    beam = ba.Beam(beamIntensity, wavelength, alpha_i)
+
+    # Detector
+    detector = create_detector(detectorDist, resolution)
+       
+    simulation = ba.ScatteringSimulation(beam, sample, detector)
+    background = 23
+    #simulation.options().setIncludeSpecular(True)
+    simulation.setBackground(ba.ConstantBackground(background))
+
+    if divergence:
+        simulation.addParameterDistribution(
+        ba.ParameterDistribution.BeamInclinationAngle,
+        ba.DistributionGaussian(alpha_i, 0.016*deg, 19, 3)
+        )
+        simulation.addParameterDistribution(
+        ba.ParameterDistribution.BeamAzimuthalAngle,
+        ba.DistributionGaussian(0*deg,   0.042*deg, 19, 3)
+        )
+    
+    q_to_mm_ConversionFactor_y = rayonix_size_y / (axesLimits[1] - axesLimits[0]) 
+    q_to_mm_ConversionFactor_x = rayonix_size_x / (axesLimits[3] - axesLimits[2]) 
+
+    simulation.detector().setRegionOfInterest(ROI_x1, ROI_y1, ROI_x2, ROI_y2)
+
+    simulation.detector().maskAll()
+
+    for horizontal_slice_value in center_horizontal_slice_values:
+        q_dist_y = horizontal_slice_value - axesLimits[0] - 0.003 #0.003 is a fudge factor
+        mm_center_y = q_dist_y * q_to_mm_ConversionFactor_y
+        mm_y2 = mm_center_y + number_slices * rayonix_pixel_size
+        mm_y1 = mm_center_y - number_slices * rayonix_pixel_size
+
+        q_dist_x_lower = horizontal_bounds[0] - axesLimits[2]
+        mm_x_lower = q_dist_x_lower * q_to_mm_ConversionFactor_x
+        q_dist_x_upper = horizontal_bounds[1] - axesLimits[2]
+        mm_x_upper = q_dist_x_upper * q_to_mm_ConversionFactor_x
+
+        #horizontal mask
+        simulation.detector().addMask(ba.Rectangle(mm_x_lower, mm_y1, mm_x_upper, mm_y2), False)
+    
+    for vertical_slice_value in center_vertical_slice_values:
+        q_dist_x = vertical_slice_value - axesLimits[2]
+        mm_center_x = q_dist_x * q_to_mm_ConversionFactor_x
+        mm_x2 = mm_center_x + number_slices * rayonix_pixel_size
+        mm_x1 = mm_center_x - number_slices * rayonix_pixel_size
+
+        q_dist_y_lower = vertical_bounds[0] - axesLimits[0] - 0.003
+        mm_y_lower = q_dist_y_lower * q_to_mm_ConversionFactor_y
+        q_dist_y_upper = vertical_bounds[1] - axesLimits[0] - 0.003
+        mm__y_upper = q_dist_y_upper * q_to_mm_ConversionFactor_y
+
+        #vertical mask
+        simulation.detector().addMask(ba.Rectangle(mm_x1,  mm_y_lower, mm_x2, mm__y_upper), False)       
+
+    #simulation.detector().addMask(ba.Rectangle(148.07181022335135, 140.59419621147006, 152.0184854930185, 177.91172274246256, False))
+    
+    #For custom form factor disable multi-threading
+    if (oneThread):
+        simulation.options().setNumberOfThreads(1)
+
+    '''
+    for i in range(100,200):
+        simulation.detector().addMask(ba.HorizontalLine(i), False)
+    '''
+    
+    return simulation
+
+
+def graph_experiment_detectorSpace(experimentFileName: str, detectorDistBeamtime = None, angle = None):
+    realData_npArray, realDat_axes = loadSim(experimentFileName)
+    sim = get_simulation_2D(get_sampleTest(), detectorDistBeamtime, angle, ROI=[0,0,300,300])
+    result = sim.simulate()
+    detectorSpaceAxes = get_axes_limits(result, ba.Coords_MM)
+    import Graphing_Analysis as graphing
+    graphing.plot2D(realData=realData_npArray, 
+                realDat_axes=detectorSpaceAxes, 
+                graphed_axes=detectorSpaceAxes,
+                zlim=[22,50000])
+
 def get_sampleTest():
     material_PS = ba.RefractiveMaterial("PS", 2.51433698E-06, 2.35385822E-09)
     material_P2VP = ba.RefractiveMaterial("P2VP", 1.656e-06, 1.096e-09)
@@ -281,12 +408,6 @@ def get_sampleTest():
 
     layout = ba.ParticleLayout()
     layout.addParticle(particle_PS)
-
-    #Hard-Disk Model
-    # Define interference functions
-    spacing = 70.95529824561405*nm #mean of diameters
-    iff = ba.InterferenceHardDisk(spacing/2*nm,0.0002527*0.65)
-    layout.setInterference(iff)
     
     # Define layers
     layer_1 = ba.Layer(material_Vacuum)

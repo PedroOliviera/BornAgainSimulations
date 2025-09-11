@@ -36,14 +36,10 @@ def get_sample(num_samples):
 
     #----------------Roughness---------------------------------------------
     #----------------PS----------------------------------------------------
-    hurst = 0.49
-    corr = 84*nm
-    sig = 3.2*nm
+    hurst = 0.6
+    corr = 95.96714518265799*nm
+    sig = 4.769811333855614 *nm
     roughness_PS = ba.LayerRoughness(sig, hurst, corr)
-    #hurst = 0.7
-    #corr = 200*nm
-    #sig = 6.795*nm
-    #roughness_PS = ba.LayerRoughness(sig, hurst, corr)
 
     #----------------SiO2---------------------------------------------------
     hurst = 0.52
@@ -73,22 +69,25 @@ def get_sample(num_samples):
 def main():
 
     region = [150, 155, 212, 212]
+    #region = [0,0,300,300]
     number_of_samples = 3
-    horizontal_slices=[1.0]
+    horizontal_slices=[1.5]
     vertical_slices=[0.0]
     '''
-    simulation_line = g.get_simulation_line(sample_model=get_sample(number_of_samples), 
+    simulation_line = g.get_simulation_line_step2(sample_model=get_sample(number_of_samples), 
                                             detectorDistBeamtime='feb', 
                                             angle_of_incidence= 0.13, 
                                             center_horizontal_slice_values=horizontal_slices, 
                                             center_vertical_slice_values= vertical_slices, 
-                                            number_slices=5)
+                                            vertical_bounds= [0.777, 3.19],
+                                            horizontal_bounds=[0,4],
+                                            number_slices=1,beamIntensity=2.689e+13)
     '''
     #'''
     simulation_2D = g.get_simulation_2D(sample_model=get_sample(number_of_samples), 
                                         detectorDistBeamtime= 'feb',
                                          angle = 0.13, 
-                                         beamIntensity = 8e12,
+                                         beamIntensity = 2.689e+13,
                                          ROI=region,
                                          oneThread=False)
     #'''
@@ -100,6 +99,5 @@ def main():
 
     g.saveSim(save_filename, final_array, simulationDataAxes)
     print("DONE")
-
 
 main()
