@@ -265,5 +265,6 @@ def main():
     g.saveSim(save_filename, final_array, simulationDataAxes)
     print("DONE")
 
-for i in [3,4]:
-    run_fitting_step2(i)
+
+
+run_fitting_step2(i)

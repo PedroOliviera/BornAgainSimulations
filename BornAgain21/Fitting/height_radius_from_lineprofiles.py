@@ -48,7 +48,12 @@ def load_lineprofiles(txt_path: str | Path) -> Tuple[np.ndarray, np.ndarray]:
     """
     df = (
         pd.read_csv(
-            txt_path, delim_whitespace=True, skiprows=2, na_values="-", header=None
+            txt_path,
+            sep=r"\s+",
+            engine="python",   # required for regex separators
+            skiprows=2,
+            na_values="-",
+            header=None,
         ).dropna(axis=1, how="all")
     )
     if df.shape[1] % 2 != 0:

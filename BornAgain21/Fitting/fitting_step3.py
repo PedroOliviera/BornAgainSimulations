@@ -10,7 +10,7 @@ import cmath
 from scipy.special import j0  # Bessel J0
 from scipy.integrate import quad
 import math
-
+import time
 def get_sample_step2(P):
     material_PS = ba.RefractiveMaterial("PS", 2.50267703E-06, 2.46904652E-09)
     material_P2VP = ba.RefractiveMaterial("P2VP", 2.51436745E-06, 2.35391329E-09)
@@ -68,7 +68,7 @@ def get_sample_step3(P):
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
     spacing = 63*nm
-    num_samples = 100
+    num_samples = 10
 
     # Minimal test — adjust file path as needed
     lineprofile_dir =  r"C:\Users\Pedro\Data Transfer\Lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
@@ -77,6 +77,7 @@ def get_sample_step3(P):
     hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
 
     diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
+    
     
     #########################################----SURFACE PARTICLES----################################################
     surface_layout = ba.ParticleLayout()
@@ -149,8 +150,15 @@ def get_sim_fitting_step2(P):
 
 def get_sim_fitting_step3(P):
     horizontal_slices=[1.5, 0.215]
-    vertical_slices=[1.075]
+    vertical_slices=[0.1075]
     '''Gets simulation for fitting'''
+    now = time.perf_counter()
+    if hasattr(get_sim_fitting_step3, "_last_call"):
+        elapsed = now - get_sim_fitting_step3._last_call
+        print(f"Elapsed time since last call: {elapsed:.6f} s")
+    else:
+        print("First call (no previous timing)")
+    get_sim_fitting_step3._last_call = now
     sim = g.get_simulation_line_step2(sample_model=get_sample_step3(P), 
                                             detectorDistBeamtime='feb', 
                                             angle_of_incidence= 0.13, 
@@ -215,8 +223,8 @@ def run_fitting_step3(i):
     fit_objective.initPrint(10)
 
     minimizer = ba.Minimizer()
-    #minimizer.setMinimizer('Genetic')
-    minimizer.setMinimizer("Minuit2", "Migrad", "MaxFunctionCalls=1;Strategy=2")
+    #minimizer.setMinimizer('Test')
+    minimizer.setMinimizer('Genetic', "MaxIterations=20;PopSize=400")
     result = minimizer.minimize(fit_objective.evaluate, P)
     fit_objective.finalize(result)
     plt.show()
@@ -227,7 +235,7 @@ def run_fitting_step3(i):
     final_result = get_sim_fitting_step3(finalP).simulate()
     simul_dat = final_result.extracted_field()
     final_array = simul_dat.npArray()
-    save_filename = "test_" + str(i) + ".npz"
+    save_filename = "step3_genetic_run1" + str(i) + ".npz"
     simulationDataAxes = g.get_axes_limits(final_result, ba.Coords_QSPACE)
 
     g.saveSim(save_filename, final_array, simulationDataAxes, params=finalP)   
@@ -265,5 +273,5 @@ def main():
     g.saveSim(save_filename, final_array, simulationDataAxes)
     print("DONE")
 
-i=0
+i=1
 run_fitting_step3(i)
