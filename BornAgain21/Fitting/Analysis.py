@@ -1,5 +1,5 @@
-import GISAXS_setup_v21 as g
-import Graphing_Analysis as graphing
+from GISAXS_Analysis import GISAXS_setup_v21 as g
+from GISAXS_Analysis import Graphing_Analysis as graphing
 
 #sim2D, simAxes = g.loadSim("fitting_Run1_miniuit2.npz")
 #sim2D, simAxes = g.loadSim("fitting_Run3_Genetic.npz")

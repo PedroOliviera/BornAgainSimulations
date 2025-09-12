@@ -1,4 +1,4 @@
-import GISAXS_setup_v21 as g2
+from GISAXS_Analysis import GISAXS_setup_v21 as g2
 from matplotlib import pyplot as plt
 from bornagain import ba_plot as bp
 import bornagain as ba
