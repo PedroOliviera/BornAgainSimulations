@@ -54,9 +54,9 @@ def tifToNpzConversion(filename:str, directory:str, detectorDistBeamtime:str, an
     final_array = simul_dat.npArray()
     data_axes = get_axes_limits(result, ba.Coords_QSPACE)
     if detectorDistBeamtime is 'feb':
-        center_img(real_data(filename, directory))
+        tif_data = center_img(real_data(filename, directory))
     elif detectorDistBeamtime is 'dec':
-        center_img2(real_data(filename, directory))
+        tif_data = center_img2(real_data(filename, directory))
     save_npz_data(os.path.join(directory, filename.replace(".tif", ".npz")), tif_data, data_axes)
 
 def save_npz_data(save_name: str, data2d: np.ndarray, axes_limits, params: dict | None = None):
