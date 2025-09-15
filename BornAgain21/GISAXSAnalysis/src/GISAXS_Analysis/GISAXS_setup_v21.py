@@ -607,7 +607,7 @@ def lineScan(data, hslice_bot, hslice_top, axesLimits, pixel_inc = 1):
     for i in range(int(num)):
         hslice = hslice_bot + increment * i
         # Assuming plot_slices is a function returning (x, y) arrays
-        x, y = plot_slices(data, axesLimits=axesLimits, horiz_slice=hslice,  normalize=False)
+        x, y = plot_slices(data, axesLimits=axesLimits, horiz_slice=hslice)
         plt.plot(x, y, label=r'$Q_{z}: $' + str(hslice), color=colormap(normalize(i)))
 
     # Setup the colorbar

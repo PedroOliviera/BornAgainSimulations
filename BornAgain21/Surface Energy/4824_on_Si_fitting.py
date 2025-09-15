@@ -11,9 +11,10 @@ def get_interference_radial(surface_layout, spacing, coherence_length, omega_ord
     iff = ba.InterferenceRadialParacrystal(spacing, coherence_length)
     iff_pdf = ba.Profile1DGauss(omega_order)
     iff.setProbabilityDistribution(iff_pdf)
+    iff.setKappa(1.5) #size-distribution model
     surface_layout.setInterference(iff)
     surface_layout.setTotalParticleSurfaceDensity(0.0003) #PLAY WITH THIS 0.0265
-    #iff.setKappa(1.5) #size-distribution model
+    
 
 def get_sample():
     materials = get_materials()
@@ -46,14 +47,14 @@ def get_sample():
     spacing = 58*nm
     coherence_length = 1000*nm
     omega_order = 4*nm
-
+    get_interference_radial(surface_layout, spacing, coherence_length, omega_order)
     # 2D Paracrystal hexagonal inteference function
-    lattice = ba.BasicLattice2D(spacing, spacing, 120*deg, 0*deg) 
-    iff = ba.Interference2DParacrystal(lattice, 0, coherence_length, coherence_length)
-    iff.setIntegrationOverXi(True)
-    iff_pdf = ba.Profile2DGauss(omega_order, omega_order, 0)
-    iff.setProbabilityDistributions(iff_pdf, iff_pdf)
-    surface_layout.setInterference(iff)
+    #lattice = ba.BasicLattice2D(spacing, spacing, 120*deg, 0*deg) 
+    #iff = ba.Interference2DParacrystal(lattice, 0, coherence_length, coherence_length)
+    #iff.setIntegrationOverXi(True)
+    #iff_pdf = ba.Profile2DGauss(omega_order, omega_order, 0)
+    #iff.setProbabilityDistributions(iff_pdf, iff_pdf)
+    #surface_layout.setInterference(iff)
 
     #Add Layers
     PS_brush_thickness = 2*nm
@@ -74,7 +75,7 @@ def get_sample():
 
 def main():         
     
-    exp_data_directory = r'C:\BornAgainSimulations\data\exp-npz'
+    exp_data_directory = r'C:\Users\Pedro\BornAgainSimulations\data\exp-npz'
     
     exp_filename = '4824_3gPL_2000RPM_0p1Deg.npz'
     exp2D, exp_axes = g.load_npz_data(exp_filename, exp_data_directory)
@@ -92,7 +93,7 @@ def main():
     final_array = simul_dat.npArray()
     save_filename = "monolayer_test.npz"
     simulationDataAxes = g.get_axes_limits(result, ba.Coords_QSPACE)
-    save_sim_directory = r'C:\BornAgainSimulations\data\sim-npz'
+    save_sim_directory = r'C:\Users\Pedro\BornAgainSimulations\data\sim-npz'
     
     g.save_npz_data(os.path.join(save_sim_directory, save_filename), final_array, simulationDataAxes)
     sim2D, simAxes, params = g.load_npz_data(save_filename, save_sim_directory, return_date=False, return_params=True)

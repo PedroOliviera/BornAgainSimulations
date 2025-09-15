@@ -69,7 +69,7 @@ def normalize_by_first_peak(
 
     return x, y / peak_height
 
-def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index):
+def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index, save):
     ax.set_title(f'Linecut {ROMAN_NUMERALS[linecut_index]}')
 
     horizontal_slice_1 = qy + 0.0001
@@ -99,6 +99,9 @@ def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_e
         )
         ax.plot(x, y, label=labels[1])
 
+    if save is True:
+        np.savez(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}.npz', x=x, y=y, x_unit="1/nm", y_unit="a.u.")
+
     ax.set_ylabel("Intensity")
     ax.set_xlabel(r'$Q_{y} \;(1/{\rm nm})$')
     ax.set_yscale('log')
@@ -106,7 +109,7 @@ def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_e
     ax.set_ylim(bottom=10)
     ax.legend()
 
-def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index):
+def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index, save):
     ax.set_title(f'Linecut {ROMAN_NUMERALS[linecut_index]}')
 
     vertical_slice_1 = qz + 0.0001
@@ -141,6 +144,9 @@ def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_e
         ax.plot(x, y, label=labels[1])
         x_data_all.extend(x)
         y_data_all.extend(y)
+    
+    if save is True:
+        np.savez(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}.npz', x=x, y=y, x_unit="1/nm", y_unit="a.u.")
 
     ax.set_ylabel("Intensity")
     ax.set_xlabel(r'$Q_{z} \;(1/{\rm nm})$')
@@ -160,7 +166,8 @@ def linecutsItoV(
     axes_exp =None,
     axes_sim = None,
     labels=("Simulation", "Experiment"),
-    title=""
+    title="",
+    save = False
 ):
     if simulation_data is None and experimental_data is None:
         print("No data provided.")
@@ -190,10 +197,10 @@ def linecutsItoV(
         if val is None:
             continue
         elif kind == "qy":
-            plot_qy_linecut(axs[j], val, simulation_data, experimental_data, axes_sim, axes_exp, labels, i)
+            plot_qy_linecut(axs[j], val, simulation_data, experimental_data, axes_sim, axes_exp, labels, i, save)
             j+=1
         elif kind == "qz":
-            plot_qz_linecut(axs[j], val, simulation_data, experimental_data, axes_sim, axes_exp, labels, i)
+            plot_qz_linecut(axs[j], val, simulation_data, experimental_data, axes_sim, axes_exp, labels, i, save)
             j+=1
 
     fig.suptitle("Simulation: " + title, fontsize=16)
