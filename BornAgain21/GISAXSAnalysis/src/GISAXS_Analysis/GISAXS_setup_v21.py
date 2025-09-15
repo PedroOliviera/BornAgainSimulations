@@ -46,12 +46,17 @@ def _jsonify_params(d):
         return v
     return {str(k): py(v) for k, v in d.items()}
 
-def tifToNpzConversion(filename:str, directory:str, detectorDistBeamtime:str):
-    if (detectorDistBeamtime == 'feb'):
-        data_axes = [-3.1895200744655168, 3.1895200744655168, -3.1895200744655163, 3.189520074465517]
-    elif (detectorDistBeamtime == 'dec'):
-        data_axes = [-2.446074535755995, 2.446074535755995, -2.4460745357559945, 2.4460745357559954]
-    tif_data = real_data(filename, directory)
+def tifToNpzConversion(filename:str, directory:str, detectorDistBeamtime:str, angle):
+    sample = get_sampleTest()
+    simulation_2D = get_simulation_2D(sample, detectorDistBeamtime, angle)
+    result = simulation_2D.simulate()
+    simul_dat = result.extracted_field()
+    final_array = simul_dat.npArray()
+    data_axes = get_axes_limits(result, ba.Coords_QSPACE)
+    if detectorDistBeamtime is 'feb':
+        center_img(real_data(filename, directory))
+    elif detectorDistBeamtime is 'dec':
+        center_img2(real_data(filename, directory))
     save_npz_data(os.path.join(directory, filename.replace(".tif", ".npz")), tif_data, data_axes)
 
 def save_npz_data(save_name: str, data2d: np.ndarray, axes_limits, params: dict | None = None):

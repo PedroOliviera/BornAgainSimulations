@@ -90,8 +90,8 @@ def get_interference_radial(surface_layout, spacing, coherence_length, omega_ord
 def get_interference_2D_para(surface_layout, spacing, coherence_length, omega_order):
     lattice = ba.BasicLattice2D(spacing, spacing, 120*deg, 0*deg) 
     iff = ba.Interference2DParacrystal(lattice, 0, coherence_length, coherence_length)
-    iff.setIntegrationOverXi(True)
-    iff_pdf = ba.Profile2DCauchy(omega_order, omega_order, 0)
+    #iff.setIntegrationOverXi(True)
+    iff_pdf = ba.Profile2DGauss(omega_order, omega_order, 0)
     iff.setProbabilityDistributions(iff_pdf, iff_pdf)
     #iff.setPositionVariance(5*nm)
     surface_layout.setInterference(iff)
@@ -110,7 +110,7 @@ def get_sample():
 
     #Particle size with dispersion
     PS_h = 15 #mu_h
-    PS_d = 62#58 #mu_d
+    PS_d = 58#58 #mu_d
     sigma_h = 1.14
     sigma_d = 4
     N = 1000
@@ -123,9 +123,10 @@ def get_sample():
     #surface_layout1 = ba.ParticleLayout()
     surface_layout2 = ba.ParticleLayout()
     for PS_diameter, PS_height, weight_K in zip(PS_diameters, PS_heights, weight_Ks):
-        ff_PS = ba.HemiEllipsoid(PS_diameter/2 * nm, PS_diameter/2 * nm, PS_height * nm)
+        #ff_PS = ba.HemiEllipsoid(PS_diameter/2 * nm, PS_diameter/2 * nm, PS_height * nm)
         #ff_PS = CustomFormFactor(PS_diameter/2*nm, PS_height*nm)
         #ff_PS = ba.Sphere(PS_diameter*nm)
+        ff_PS = ba.Pyramid4(PS_diameter * nm, PS_height * nm, 37*deg)
         particle_PS= ba.Particle(material_PS, ff_PS)
         #surface_layout1.addParticle(particle_PS, weight_K)
         surface_layout2.addParticle(particle_PS, weight_K)
@@ -134,7 +135,7 @@ def get_sample():
     #spacing1 = 52*nm
     spacing2 = 104*nm
     coherence_length = 1000*nm
-    omega_order = 4*nm
+    omega_order = 12*nm
     #get_interference_2D_para(surface_layout2, spacing2, coherence_length, omega_order)
     #get_interference_radial(surface_layout1, spacing1, coherence_length, omega_order)
     get_interference_radial(surface_layout2, spacing2, coherence_length, omega_order)
@@ -163,15 +164,15 @@ def main():
     exp_filename = '4824_3gPL_2000RPM_0p1Deg.npz'
     exp2D, exp_axes = g.load_npz_data(exp_filename, exp_data_directory)
     region = [150, 150, 200, 300]
-    simulation_line = g.get_simulation_line(sample_model=get_sample(), 
-                                            detectorDistBeamtime='dec', 
-                                            angle_of_incidence= 0.1, 
-                                            center_horizontal_slice_values=[0.2], 
-                                            center_vertical_slice_values= [0],
-                                            number_slices=10,beamIntensity=1e11)
+    #simulation_line = g.get_simulation_line(sample_model=get_sample(), 
+    #                                        detectorDistBeamtime='dec', 
+    #                                        angle_of_incidence= 0.1, 
+    #                                        center_horizontal_slice_values=None, 
+    #                                        center_vertical_slice_values= [0.125],
+    #                                        number_slices=10,beamIntensity=1e13)
 
-    #simulation_2D = g.get_simulation_2D(sample_model=get_sample(), detectorDistBeamtime= 'dec', angle = 0.1, beamIntensity = 1e11,ROI=region)
-    result = simulation_line.simulate()
+    simulation_2D = g.get_simulation_2D(sample_model=get_sample(), detectorDistBeamtime= 'dec', angle = 0.1, beamIntensity = 1e13,ROI=region)
+    result = simulation_2D.simulate()
     simul_dat = result.extracted_field()
     final_array = simul_dat.npArray()
     
@@ -182,8 +183,8 @@ def main():
     g.save_npz_data(os.path.join(save_sim_directory, save_filename), final_array, simulationDataAxes)
     sim2D, simAxes, params = g.load_npz_data(save_filename, save_sim_directory, return_date=False, return_params=True)
 
-    linecut1 = 0.2
-    linecut2 = 0.1
+    #linecut1 = 0.2
+    linecut2 = 0.125
 
     graphing.plot2D(realData=exp2D, 
                 simulationData=sim2D, 
@@ -193,7 +194,7 @@ def main():
     graphing.linecutsItoV(simulation_data=sim2D, 
                       experimental_data=exp2D, 
                       #L2_qy=linecut2,
-                      L1_qz=linecut1, 
+                      #L1_qz=linecut1, 
                       L2_qy=linecut2,
                       #L5_qz=linecut5, 
                       axes_exp=exp_axes, 
