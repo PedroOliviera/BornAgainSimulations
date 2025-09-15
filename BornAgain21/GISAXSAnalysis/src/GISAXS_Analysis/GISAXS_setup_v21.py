@@ -203,7 +203,7 @@ def beamStopMask(x1 = - 0.041 , y1 = - 0.2, x2 = 0.04292, y2 = 0.5935):
     print(mm_TOPRIGHT_x)
     print(mm_TOPRIGHT_y)
 
-def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, center_horizontal_slice_values, center_vertical_slice_values, number_slices, ROI = [140,150,300,300] , beamIntensity = 8e12, resolution = False, divergence = False, oneThread = False):
+def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, center_horizontal_slice_values=None, center_vertical_slice_values=None, number_slices=1, ROI = [140,150,300,300] , beamIntensity = 8e12, resolution = False, divergence = False, oneThread = False):
     '''
     sample: getSample()
     P : Sample Parameter Variation
@@ -258,23 +258,25 @@ def get_simulation_line(sample_model, detectorDistBeamtime, angle_of_incidence, 
 
     simulation.detector().maskAll()
 
-    for horizontal_slice_value in center_horizontal_slice_values:
-        q_dist_y = horizontal_slice_value - axesLimits[0] - 0.003
-        mm_center_y = q_dist_y * q_to_mm_ConversionFactor_y
-        mm_y2 = mm_center_y + number_slices * rayonix_pixel_size
-        mm_y1 = mm_center_y - number_slices * rayonix_pixel_size
+    if center_horizontal_slice_values is not None:
+        for horizontal_slice_value in center_horizontal_slice_values:
+            q_dist_y = horizontal_slice_value - axesLimits[0] - 0.003
+            mm_center_y = q_dist_y * q_to_mm_ConversionFactor_y
+            mm_y2 = mm_center_y + number_slices * rayonix_pixel_size
+            mm_y1 = mm_center_y - number_slices * rayonix_pixel_size
 
-        #horizontal mask
-        simulation.detector().addMask(ba.Rectangle(ROI_x1,mm_y1, ROI_x2, mm_y2), False)
+            #horizontal mask
+            simulation.detector().addMask(ba.Rectangle(ROI_x1,mm_y1, ROI_x2, mm_y2), False)
     
-    for vertical_slice_value in center_vertical_slice_values:
-        q_dist_x = vertical_slice_value - axesLimits[2]
-        mm_center_x = q_dist_x * q_to_mm_ConversionFactor_x
-        mm_x2 = mm_center_x + number_slices * rayonix_pixel_size
-        mm_x1 = mm_center_x - number_slices * rayonix_pixel_size
+    if center_vertical_slice_values is not None:
+        for vertical_slice_value in center_vertical_slice_values:
+            q_dist_x = vertical_slice_value - axesLimits[2]
+            mm_center_x = q_dist_x * q_to_mm_ConversionFactor_x
+            mm_x2 = mm_center_x + number_slices * rayonix_pixel_size
+            mm_x1 = mm_center_x - number_slices * rayonix_pixel_size
 
-        #vertical mask
-        simulation.detector().addMask(ba.Rectangle(mm_x1, ROI_y1, mm_x2, ROI_y2), False)       
+            #vertical mask
+            simulation.detector().addMask(ba.Rectangle(mm_x1, ROI_y1, mm_x2, ROI_y2), False)       
 
     #simulation.detector().addMask(ba.Rectangle(148.07181022335135, 140.59419621147006, 152.0184854930185, 177.91172274246256, False))
     
