@@ -36,6 +36,54 @@ import matplotlib.pyplot as plt
 
 # ============================ I/O ============================
 
+def sample_height_diameter(mu_h: float,
+                           mu_d: float,
+                           sigma_h: float,
+                           sigma_d: float,
+                           rho: float,
+                           N: int,
+                           seed: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Generates (height, diameter) pairs for a polydisperse set of particles.
+
+    Parameters
+    ----------
+    mu_h, mu_d : float
+        Means (averages) of height and diameter.
+    sigma_h, sigma_d : float
+        Standard deviations of height and diameter (must be > 0).
+    rho : float
+        Correlation between height and diameter (-1 < rho < 1).
+    N : int
+        Number of samples.
+    seed : int | None
+        Optional RNG seed for reproducibility.
+
+    Returns
+    -------
+    h : np.ndarray
+        Shape (N,), sampled heights as float.
+    d : np.ndarray
+        Shape (N,), sampled diameters as float.
+    """
+    if sigma_h <= 0 or sigma_d <= 0:
+        raise ValueError("sigma_h and sigma_d must be positive.")
+    if not (-1 < rho < 1):
+        raise ValueError("rho must be strictly between -1 and 1.")
+
+    cov = np.array([
+        [sigma_h**2, rho * sigma_h * sigma_d],
+        [rho * sigma_h * sigma_d, sigma_d**2],
+    ], dtype=float)
+
+    rng = np.random.default_rng(seed)
+    mean_vec = np.array([mu_h, mu_d], dtype=float)
+    samples = rng.multivariate_normal(mean=mean_vec, cov=cov, size=int(N))
+
+    h = np.asarray(samples[:, 0], float)
+    d = np.asarray(samples[:, 1], float)
+    return h, d
+
 def load_lineprofiles(txt_path: str | Path) -> Tuple[np.ndarray, np.ndarray]:
     """
     Read whitespace-delimited file with interleaved x,y columns.
@@ -736,8 +784,7 @@ def visualize_kmedoids(
     labels: np.ndarray,
     weight_rep: Optional[np.ndarray] = None,
     figsize: Tuple[float, float] = (7.5, 6.0),
-    annotate_weights: bool = True,
-    show: bool = True,
+    annotate_weights: bool = True
 ):
     """
     Scatter raw points colored by cluster; overlay medoids (stars) sized by weight.
@@ -773,6 +820,4 @@ def visualize_kmedoids(
     fig.colorbar(sc, ax=ax, label="Cluster")
     ax.legend(frameon=False, loc="best")
     fig.tight_layout()
-    if show:
-        plt.show()
     return fig, ax

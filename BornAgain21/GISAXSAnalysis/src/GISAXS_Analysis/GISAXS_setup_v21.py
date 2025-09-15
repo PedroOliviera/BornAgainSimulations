@@ -46,13 +46,21 @@ def _jsonify_params(d):
         return v
     return {str(k): py(v) for k, v in d.items()}
 
-def saveSim(save_name: str, sim2d: np.ndarray, axes_limits, params: dict | None = None):
+def tifToNpzConversion(filename:str, directory:str, detectorDistBeamtime:str):
+    if (detectorDistBeamtime == 'feb'):
+        data_axes = [-3.1895200744655168, 3.1895200744655168, -3.1895200744655163, 3.189520074465517]
+    elif (detectorDistBeamtime == 'dec'):
+        data_axes = [-2.446074535755995, 2.446074535755995, -2.4460745357559945, 2.4460745357559954]
+    tif_data = real_data(filename, directory)
+    save_npz_data(os.path.join(directory, filename.replace(".tif", ".npz")), tif_data, data_axes)
+
+def save_npz_data(save_name: str, data2d: np.ndarray, axes_limits, params: dict | None = None):
 
     date = get_timestamp().isoformat()
     axes = np.asarray(axes_limits, dtype=np.float64)
 
     payload = {
-        "sim": sim2d,
+        "sim": data2d,
         "axes_limits": axes,
         "saved_at": date
     }
@@ -61,7 +69,7 @@ def saveSim(save_name: str, sim2d: np.ndarray, axes_limits, params: dict | None 
 
     np.savez(save_name, **payload)
 
-def loadSim(path: str, return_date: bool = False, return_params: bool = False):
+def load_npz_data(filename: str, directory: str, return_date: bool = False, return_params: bool = False):
     """
     Load data saved by saveSim().
     Returns:
@@ -69,7 +77,7 @@ def loadSim(path: str, return_date: bool = False, return_params: bool = False):
       + saved_at (str) if return_date=True
       + params (dict or None) if return_params=True
     """
-    with np.load(path, allow_pickle=False) as f:
+    with np.load(os.path.join(directory,filename), allow_pickle=False) as f:
         sim   = f["sim"]
         axes  = f["axes_limits"]
         out = [sim, axes]
@@ -377,12 +385,12 @@ def get_simulation_line_step2(sample_model, detectorDistBeamtime, angle_of_incid
     return simulation
 
 
-def graph_experiment_detectorSpace(experimentFileName: str, detectorDistBeamtime = None, angle = None):
-    realData_npArray, realDat_axes = loadSim(experimentFileName)
+def graph_experiment_detectorSpace(experiment_file_name: str, experiment_directory: str, detectorDistBeamtime = None, angle = None):
+    realData_npArray, realDat_axes = load_npz_data(experiment_file_name, experiment_directory)
     sim = get_simulation_2D(get_sampleTest(), detectorDistBeamtime, angle, ROI=[0,0,300,300])
     result = sim.simulate()
     detectorSpaceAxes = get_axes_limits(result, ba.Coords_MM)
-    import Graphing_Analysis as graphing
+    from GISAXS_Analysis import Graphing_Analysis as graphing
     graphing.plot2D(realData=realData_npArray, 
                 realDat_axes=detectorSpaceAxes, 
                 graphed_axes=detectorSpaceAxes,

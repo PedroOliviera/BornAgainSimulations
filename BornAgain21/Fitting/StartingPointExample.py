@@ -1,10 +1,10 @@
-import GISAXS_setup_v21 as g
-import Graphing_Analysis as graphing
+import BornAgain21.GISAXS_Analysis.GISAXS_setup_v21 as g
+import BornAgain21.GISAXS_Analysis.Graphing_Analysis as graphing
 from bornagain import ba_plot as bp, deg, angstrom, nm
 import bornagain as ba
 from bornagain import nm, deg
 import matplotlib.pyplot as plt
-import height_radius_from_lineprofiles as h_r
+import BornAgain21.GISAXS_Analysis.height_radius_from_lineprofiles as h_r
 import numpy as np
 import cmath
 from scipy.special import j0  # Bessel J0
