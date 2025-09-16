@@ -48,14 +48,14 @@ def _jsonify_params(d):
 
 def tifToNpzConversion(filename:str, directory:str, detectorDistBeamtime:str, angle):
     sample = get_sampleTest()
-    simulation_2D = get_simulation_2D(sample, detectorDistBeamtime, angle)
+    simulation_2D = get_simulation_2D(sample, detectorDistBeamtime, angle, ROI=[0, 0, 300, 300])
     result = simulation_2D.simulate()
     simul_dat = result.extracted_field()
     final_array = simul_dat.npArray()
     data_axes = get_axes_limits(result, ba.Coords_QSPACE)
-    if detectorDistBeamtime is 'feb':
+    if detectorDistBeamtime == 'feb':
         tif_data = center_img(real_data(filename, directory))
-    elif detectorDistBeamtime is 'dec':
+    elif detectorDistBeamtime == 'dec':
         tif_data = center_img2(real_data(filename, directory))
     save_npz_data(os.path.join(directory, filename.replace(".tif", ".npz")), tif_data, data_axes)
 
@@ -167,8 +167,8 @@ def get_simulation_2D(sample_model, detectorDistBeamtime = 'feb', angle = None, 
     else:
         simulation.detector().setRegionOfInterest(120, 155, 180, 210)
 
-    #if (oneThread):
-    #    simulation.options().setNumberOfThreads(1)
+    if (oneThread):
+        simulation.options().setNumberOfThreads(1)
 
     
 

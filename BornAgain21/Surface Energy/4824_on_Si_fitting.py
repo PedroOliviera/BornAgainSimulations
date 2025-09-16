@@ -109,7 +109,8 @@ def get_sample():
     material_Vacuum=materials['Vacuum']
 
     #Particle size with dispersion
-    PS_h = 15 #mu_h
+    #PS_h = 15#15 mu_h
+    PS_h = 12*nm
     PS_d = 58#58 #mu_d
     sigma_h = 1.14
     sigma_d = 4
@@ -125,9 +126,14 @@ def get_sample():
     for PS_diameter, PS_height, weight_K in zip(PS_diameters, PS_heights, weight_Ks):
         #ff_PS = ba.HemiEllipsoid(PS_diameter/2 * nm, PS_diameter/2 * nm, PS_height * nm)
         #ff_PS = CustomFormFactor(PS_diameter/2*nm, PS_height*nm)
+        ff_PS = ba.CosineRippleGauss(PS_diameter*nm, PS_diameter*nm, PS_height*nm)
         #ff_PS = ba.Sphere(PS_diameter*nm)
-        ff_PS = ba.Pyramid4(PS_diameter * nm, PS_height * nm, 37*deg)
+        #ff_PS = ba.Pyramid4(PS_diameter * nm, PS_height * nm, 37*deg)
+        #ff_PS = ba.Cone(PS_diameter/2 * nm, PS_height * nm, 37*deg)
+        #particle_rotation = ba.RotationZ(5*deg)
+        
         particle_PS= ba.Particle(material_PS, ff_PS)
+        #particle_PS.rotate(particle_rotation)
         #surface_layout1.addParticle(particle_PS, weight_K)
         surface_layout2.addParticle(particle_PS, weight_K)
 
@@ -171,12 +177,12 @@ def main():
     #                                        center_vertical_slice_values= [0.125],
     #                                        number_slices=10,beamIntensity=1e13)
 
-    simulation_2D = g.get_simulation_2D(sample_model=get_sample(), detectorDistBeamtime= 'dec', angle = 0.1, beamIntensity = 1e13,ROI=region)
+    simulation_2D = g.get_simulation_2D(sample_model=get_sample(), detectorDistBeamtime= 'dec', angle = 0.1, beamIntensity = 1e12,ROI=region, oneThread=True)
     result = simulation_2D.simulate()
     simul_dat = result.extracted_field()
     final_array = simul_dat.npArray()
     
-    save_filename = "monolayer_test2.npz"
+    save_filename = "monolayer_CosineRippleGauss.npz"
     simulationDataAxes = g.get_axes_limits(result, ba.Coords_QSPACE)
     save_sim_directory = r'C:\Users\Pedro\BornAgainSimulations\data\sim-npz'
     
@@ -184,13 +190,13 @@ def main():
     sim2D, simAxes, params = g.load_npz_data(save_filename, save_sim_directory, return_date=False, return_params=True)
 
     #linecut1 = 0.2
-    linecut2 = 0.125
+    linecut2 = 0.2
 
     graphing.plot2D(realData=exp2D, 
                 simulationData=sim2D, 
                 realDat_axes=exp_axes, 
                 simData_axes=simAxes, 
-                zlim=[22,50000])
+                zlim=[15,66000])
     graphing.linecutsItoV(simulation_data=sim2D, 
                       experimental_data=exp2D, 
                       #L2_qy=linecut2,
