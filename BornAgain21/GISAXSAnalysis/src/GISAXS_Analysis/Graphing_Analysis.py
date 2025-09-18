@@ -1,4 +1,4 @@
-from GISAXS_Analysis import GISAXS_setup_v21 as g2
+from GISAXS_Analysis import GISAXS_setup_v21 as g
 from matplotlib import pyplot as plt
 from bornagain import ba_plot as bp
 import bornagain as ba
@@ -6,15 +6,203 @@ import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from scipy.signal import savgol_filter
 import numpy as np
+from typing import Optional, Tuple
 
 # Roman numerals for subplot titles
 ROMAN_NUMERALS = ["I", "II", "III", "IV", "V"]
 
+import numpy as np
+from typing import Optional, Tuple, Union
+
+def _ensure_ascending(x: np.ndarray, img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Make x ascending; flip image columns accordingly if needed."""
+    x = np.asarray(x, float)
+    if x.ndim != 1:
+        raise ValueError("x must be 1D.")
+    if np.any(np.diff(x) < 0):
+        return x[::-1], img[:, ::-1]
+    return x, img
+
+def _nearest_index(x: np.ndarray, value: float) -> int:
+    return int(np.nanargmin(np.abs(x - value)))
+
+def stitch_detector_halves(
+    img_left: np.ndarray,
+    img_right: np.ndarray,
+    x_left: Optional[np.ndarray] = None,
+    x_right: Optional[np.ndarray] = None,
+    *,
+    zero_from: str = "right",   # which side keeps the x=0 column: "left" or "right"
+    return_x: bool = False
+) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """
+    Stitch two detector images along x = 0.
+
+    If x_left/x_right are provided:
+        - Keep full negative side from the LEFT image:   x_left < 0 (or <= 0 if zero_from='left')
+        - Keep full positive side from the RIGHT image:  x_right > 0 (or >= 0 if zero_from='right')
+        - Concatenate along columns (x).
+        - Return the stitched x-array if return_x=True.
+
+    If x_left/x_right are NOT provided:
+        - Treat the middle column as x=0 for each image.
+        - Keep left half of img_left and right half of img_right.
+        - No physical x-array is returned unless you want pixel-centered coords.
+
+    Requirements:
+        - img_left.shape[0] == img_right.shape[0] (same number of rows).
+        - If x arrays are given, their lengths must match the number of columns of the respective image.
+    """
+    img_left  = np.asarray(img_left,  float)
+    img_right = np.asarray(img_right, float)
+
+    if img_left.ndim != 2 or img_right.ndim != 2:
+        raise ValueError("Both inputs must be 2D arrays.")
+    if img_left.shape[0] != img_right.shape[0]:
+        raise ValueError("Images must have the same number of rows (y).")
+
+    def _ensure_ascending(x, img):
+        x = np.asarray(x, float)
+        if x.ndim != 1 or x.size != img.shape[1]:
+            raise ValueError("x must be 1D with length equal to number of columns.")
+        if np.any(np.diff(x) < 0):
+            # flip horizontally to make x increasing
+            return x[::-1], img[:, ::-1]
+        return x, img
+
+    if x_left is not None and x_right is not None:
+        # align x orientation with columns
+        x_left,  img_left  = _ensure_ascending(x_left,  img_left)
+        x_right, img_right = _ensure_ascending(x_right, img_right)
+
+        # decide which side owns x=0
+        if zero_from not in {"left", "right"}:
+            raise ValueError("zero_from must be 'left' or 'right'.")
+
+        if zero_from == "left":
+            left_mask  = (x_left <= 0.0)
+            right_mask = (x_right >  0.0)
+        else:  # zero_from == "right"
+            left_mask  = (x_left <  0.0)
+            right_mask = (x_right >= 0.0)
+
+        left_cols  = np.where(left_mask)[0]
+        right_cols = np.where(right_mask)[0]
+        if left_cols.size == 0:
+            raise ValueError("No columns with x<=(or<)0 in left image.")
+        if right_cols.size == 0:
+            raise ValueError("No columns with x>=(or>)0 in right image.")
+
+        imgL = img_left[:, left_cols]
+        imgR = img_right[:, right_cols]
+        xL   = x_left[left_cols]
+        xR   = x_right[right_cols]
+
+        img_stitched = np.concatenate([imgL, imgR], axis=1)
+        x_stitched   = np.concatenate([xL, xR])
+
+        return (img_stitched, x_stitched) if return_x else (img_stitched, None)
+
+    # -------- No x arrays provided: split by middle column (treat as x=0) --------
+    ncols_L = img_left.shape[1]
+    ncols_R = img_right.shape[1]
+
+    # If even, middle is the boundary between the two central columns.
+    # If odd, we give the center column to `zero_from`.
+    mid_L = ncols_L // 2
+    mid_R = ncols_R // 2
+
+    if zero_from == "left":
+        # left keeps its middle column as x=0
+        imgL = img_left[:, :mid_L + (ncols_L % 2)]
+        imgR = img_right[:, mid_R + (ncols_R % 2):]
+    else:  # "right"
+        # right keeps its middle column as x=0
+        imgL = img_left[:, :mid_L]
+        imgR = img_right[:, mid_R:]
+
+    img_stitched = np.concatenate([imgL, imgR], axis=1)
+
+    if return_x:
+        # fabricate pixel-centered x with 0 at the stitch point
+        nL = imgL.shape[1]
+        nR = imgR.shape[1]
+        x_left_pix  = np.arange(-nL, 0, dtype=float)
+        x_right_pix = np.arange(0, nR, dtype=float)
+        x_stitched  = np.concatenate([x_left_pix, x_right_pix])
+        return img_stitched, x_stitched
+
+    return img_stitched, None
+
+
+def normalize2d_by_max(
+    img: np.ndarray,
+    roi: Optional[Tuple[int, int, int, int]] = None,  # (row_start, row_end, col_start, col_end), end exclusive
+    mask: Optional[np.ndarray] = None,                # boolean mask same shape as img; True = included
+    clip_negatives: bool = False,                     # clip <0 to 0 after normalization
+    log_floor: Optional[float] = None,                # e.g., 1e-12 to be log-safe; applied after negative clipping
+    return_scale: bool = False,                       # also return the max used for normalization
+) -> np.ndarray | Tuple[np.ndarray, float]:
+    """
+    Normalize a 2D array by the maximum FINITE pixel value.
+
+    - If `roi` is provided, the max is computed within that rectangular region.
+    - If `mask` is provided, the max is computed over True-valued pixels.
+      (If both roi and mask are given, they are combined: ROI ∩ mask.)
+    - NaNs/±inf are ignored when computing the max and remain as-is in the output.
+    - Optionally clips negatives to 0 and/or applies a tiny positive floor for log plots.
+
+    Raises
+    ------
+    ValueError
+        If no finite pixels are found in the selected region, or if the max ≤ 0.
+
+    Returns
+    -------
+    arr_norm or (arr_norm, scale)
+        The normalized array (float64). If `return_scale=True`, also returns the max used.
+    """
+    arr = np.asarray(img, dtype=float)
+    if arr.ndim != 2:
+        raise ValueError("Expected a 2D array.")
+
+    # Build a selection mask of finite values
+    finite = np.isfinite(arr)
+
+    # Apply ROI if given
+    if roi is not None:
+        r0, r1, c0, c1 = roi
+        sel = np.zeros_like(finite, dtype=bool)
+        sel[max(r0, 0):max(r0, 0) + (r1 - r0), max(c0, 0):max(c0, 0) + (c1 - c0)] = True
+        finite &= sel
+
+    # Apply mask if given
+    if mask is not None:
+        if mask.shape != arr.shape:
+            raise ValueError("mask must have the same shape as img.")
+        finite &= mask.astype(bool)
+
+    if not np.any(finite):
+        raise ValueError("No finite pixels found in the selected region.")
+
+    scale = np.nanmax(arr[finite])
+    if not np.isfinite(scale) or scale <= 0:
+        raise ValueError(f"Max finite pixel is non-positive ({scale}); cannot normalize.")
+
+    out = arr / scale
+
+    if clip_negatives:
+        out = np.maximum(out, 0.0)
+    if log_floor is not None:
+        out = np.clip(out, log_floor, None)
+
+    return (out, scale) if return_scale else out
+
 def normalize_by_first_peak(
     x,
     y,
-    x_min=0.14,
-    x_max=0.16,
+    x_min,
+    x_max,
 ):
     """
     Normalize y by the height of the *first* peak whose x-coordinate lies
@@ -51,13 +239,11 @@ def normalize_by_first_peak(
     if in_window.size == 0:
         raise ValueError(f"No data points with {x_min} ≤ x ≤ {x_max}")
 
-    # iterate over window indices to find first local maximum
-    peak_idx = None
-    for i in in_window:
-        # avoid edges where i==0 or i==len(y)-1
-        if 0 < i < len(y) - 1 and y[i - 1] < y[i] >= y[i + 1]:
-            peak_idx = i
-            break
+    peak_idx = in_window[np.nanargmax(y[in_window])]
+
+    peak_height = y[peak_idx]
+    if peak_height == 0:
+        raise ValueError("Peak height is zero; cannot normalize.")
 
     # fallback: pick highest point in the window
     if peak_idx is None:
@@ -66,17 +252,16 @@ def normalize_by_first_peak(
     peak_height = y[peak_idx]
     if peak_height == 0:
         raise ValueError("Peak height is zero; cannot normalize.")
-
     return x, y / peak_height
 
-def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index, save):
+def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index, save, savefname):
     ax.set_title(f'Linecut {ROMAN_NUMERALS[linecut_index]}')
 
     horizontal_slice_1 = qy + 0.0001
     horizontal_slice_2 = qy - 0.0001
 
     if simulation_data is not None:
-        x, y = g2.integrate_plt_slices(
+        x, y = g.integrate_plt_slices(
             start=horizontal_slice_2,
             stop=horizontal_slice_1,
             data=simulation_data,
@@ -88,7 +273,7 @@ def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_e
         ax.plot(x, y, label=labels[0])
 
     if experimental_data is not None:
-        x, y = g2.integrate_plt_slices(
+        x, y = g.integrate_plt_slices(
             start=horizontal_slice_2,
             stop=horizontal_slice_1,
             data=experimental_data,
@@ -100,7 +285,7 @@ def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_e
         ax.plot(x, y, label=labels[1])
 
     if save is True:
-        np.savez(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}.npz', x=x, y=y, x_unit="1/nm", y_unit="a.u.")
+        np.savez(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}_{savefname}.npz', x=x, y=y, x_unit="1/nm", y_unit="a.u.")
 
     ax.set_ylabel("Intensity")
     ax.set_xlabel(r'$Q_{y} \;(1/{\rm nm})$')
@@ -109,7 +294,7 @@ def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_e
     ax.set_ylim(bottom=10)
     ax.legend()
 
-def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index, save):
+def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_exp, labels, linecut_index, save, savefname):
     ax.set_title(f'Linecut {ROMAN_NUMERALS[linecut_index]}')
 
     vertical_slice_1 = qz + 0.0001
@@ -118,7 +303,7 @@ def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_e
     x_data_all, y_data_all = [], []
 
     if simulation_data is not None:
-        x, y = g2.integrate_plt_slices(
+        x, y = g.integrate_plt_slices(
             start=vertical_slice_2,
             stop=vertical_slice_1,
             data=simulation_data,
@@ -132,7 +317,7 @@ def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_e
         y_data_all.extend(y)
 
     if experimental_data is not None:
-        x, y = g2.integrate_plt_slices(
+        x, y = g.integrate_plt_slices(
             start=vertical_slice_2,
             stop=vertical_slice_1,
             data=experimental_data,
@@ -146,7 +331,7 @@ def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_e
         y_data_all.extend(y)
     
     if save is True:
-        np.savez(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}.npz', x=x, y=y, x_unit="1/nm", y_unit="a.u.")
+        np.savez(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}_{savefname}.npz', x=x, y=y, x_unit="1/nm", y_unit="a.u.")
 
     ax.set_ylabel("Intensity")
     ax.set_xlabel(r'$Q_{z} \;(1/{\rm nm})$')
@@ -167,7 +352,8 @@ def linecutsItoV(
     axes_sim = None,
     labels=("Simulation", "Experiment"),
     title="",
-    save = False
+    save = False,
+    savefname =''
 ):
     if simulation_data is None and experimental_data is None:
         print("No data provided.")
@@ -197,10 +383,10 @@ def linecutsItoV(
         if val is None:
             continue
         elif kind == "qy":
-            plot_qy_linecut(axs[j], val, simulation_data, experimental_data, axes_sim, axes_exp, labels, i, save)
+            plot_qy_linecut(axs[j], val, simulation_data, experimental_data, axes_sim, axes_exp, labels, i, save, savefname)
             j+=1
         elif kind == "qz":
-            plot_qz_linecut(axs[j], val, simulation_data, experimental_data, axes_sim, axes_exp, labels, i, save)
+            plot_qz_linecut(axs[j], val, simulation_data, experimental_data, axes_sim, axes_exp, labels, i, save, savefname)
             j+=1
 
     fig.suptitle("Simulation: " + title, fontsize=16)
@@ -349,7 +535,7 @@ def plot2D_simulationComparison(
     plt.tight_layout()
     plt.show()
 
-def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_axes2=None, xmin = float, xmax = float, labels = None):
+def yonedaPlot(vert_slice_q, data_npArrays, data_axes_array, data2_npArray=None, data_axes2=None, xmin = float, xmax = float, labels = None):
     """Inputs:
     vert_slice_q: will take max of this vert slice value and use for horizontal slice value
     data_npArrays: array of dataset to be compared
@@ -357,28 +543,26 @@ def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_
     data2_npArrays: designed to add one other dataset that has a different axis e.g. adding one experiment to varying sim parameter
     data2_axes2: designed to add one other dataset that has a different axis e.g. adding one experiment to varying sim parameter
     """
-    vert_slice_q = 0.1
     plt.figure(figsize=(7,5))
 
     n_datasets = len(data_npArrays)
     cmap = cm.get_cmap("jet", n_datasets)  # evenly spaced colors from jet colormap
 
-    for i, data in enumerate(data_npArrays):
+    for i, (data, data_axes) in enumerate(zip(data_npArrays, data_axes_array)):
         # Take vertical slice at Qz = vert_slice_q
-        x1, y1 = g2.plot_slices(data, axesLimits=data_axes, vert_slice=vert_slice_q)
+        x1, y1 = g.plot_slices(data, axesLimits=data_axes, vert_slice=vert_slice_q)
         ind_x1 = np.argmax(y1)         # position of maximum intensity
         hor_slice_q = x1[ind_x1]       # Qy value of that maximum
-        print(hor_slice_q)
-        
+
         step = 0.01
-        #hor_slice_q = 0.03
+        #hor_slice_q = 0.3
         # Now take horizontal slice through that maximum
-        x2, y2 = g2.plot_slices(data, axesLimits=data_axes, horiz_slice=hor_slice_q)
-        x2, y2 = g2.integrate_plt_slices(start = hor_slice_q - step, stop= hor_slice_q + step, data=data, axLim=data_axes, labelname=i, num=20, horiz_slice=True)
-        #xmin = 0.085
-        #xmax = 0.137
-        x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = xmin, x_max=xmax)
-        #x2_norm, y2_norm = x2, y2
+        x2, y2 = g.plot_slices(data, axesLimits=data_axes, horiz_slice=hor_slice_q)
+        x2, y2 = g.integrate_plt_slices(start = hor_slice_q - step, stop= hor_slice_q + step, data=data, axLim=data_axes, labelname=i, num=20, horiz_slice=True)
+        xmin = 0.085
+        xmax = 0.137
+        #x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = xmin, x_max=xmax)
+        x2_norm, y2_norm = x2, y2
         
         y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
 
@@ -389,17 +573,17 @@ def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_
         plt.plot(x2_norm, y_s, label = labels[i], color=color)
 
     if data2_npArray is not None:
-        x1, y1 = g2.plot_slices(data2_npArray, axesLimits=data_axes2, vert_slice=vert_slice_q)
+        x1, y1 = g.plot_slices(data2_npArray, axesLimits=data_axes2, vert_slice=vert_slice_q)
         ind_x1 = np.argmax(y1)         # position of maximum intensity
         hor_slice_q = x1[ind_x1]       # Qy value of that maximum
         
         step = 0.01
         #hor_slice_q = 0.4
         # Now take horizontal slice through that maximum
-        x2, y2 = g2.plot_slices(data2_npArray, axesLimits=data_axes2, horiz_slice=hor_slice_q)
-        x2, y2 = g2.integrate_plt_slices(start = hor_slice_q - step, stop= hor_slice_q + step, data=data2_npArray, axLim=data_axes2, labelname=i, num=20, horiz_slice=True)
+        x2, y2 = g.plot_slices(data2_npArray, axesLimits=data_axes2, horiz_slice=hor_slice_q)
+        x2, y2 = g.integrate_plt_slices(start = hor_slice_q - step, stop= hor_slice_q + step, data=data2_npArray, axLim=data_axes2, labelname=i, num=20, horiz_slice=True)
         x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = 0.085, x_max=0.137)
-        
+
         y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
 
         # Plot with label and custom color
@@ -415,5 +599,118 @@ def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_
     plt.title(rf"Horizontal Slices Along $Q_{{z}}$", fontsize=12)
     plt.yscale("log")
     plt.xscale("log")
+    plt.grid(which="both", ls="--", lw=0.5, alpha=0.6)
+    plt.tight_layout()
+
+def hor_slice_comparison(hor_slice_q_array, data_npArrays, data_axes_array, data2_npArray=None, data_axes2=None, xmin = 0.0, xmax = 0.0, labels = None):
+    """Inputs:
+    vert_slice_q: will take max of this vert slice value and use for horizontal slice value
+    data_npArrays: array of dataset to be compared
+    data_axes: axes of data (g2.get_axes_limits(result, ba.Coords_QSPACE) for simulation) and realData_axes_month for experimental data
+    data2_npArrays: designed to add one other dataset that has a different axis e.g. adding one experiment to varying sim parameter
+    data2_axes2: designed to add one other dataset that has a different axis e.g. adding one experiment to varying sim parameter
+    """
+    plt.figure(figsize=(7,5))
+
+    n_datasets = len(data_npArrays)
+    #cmap = cm.get_cmap("rainbow", n_datasets)  # evenly spaced colors from jet colormap
+    cmap = ['red', 'green', 'purple', 'blue', 'orange']
+    for i, (data, data_axes, hor_slice_q) in enumerate(zip(data_npArrays, data_axes_array, hor_slice_q_array)):
+        
+        step = 0.01
+        # Now take horizontal slice through that maximum
+        x2, y2 = g.plot_slices(data, axesLimits=data_axes, horiz_slice=hor_slice_q)
+        x2, y2 = g.integrate_plt_slices(start = hor_slice_q - step, stop= hor_slice_q + step, data=data, axLim=data_axes, labelname=i, num=20, horiz_slice=True)
+       
+        x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = xmin, x_max=xmax)
+        #x2_norm, y2_norm = x2, y2
+        
+        #y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
+
+        # Get color from colormap
+        color = cmap[i]#cmap(i)
+
+        # Plot with label and custom color
+        plt.plot(x2_norm, y2_norm, label = labels[i], color=color)
+
+    if data2_npArray is not None:
+        
+        step = 0.01
+        # Now take horizontal slice through that maximum
+        x2, y2 = g.plot_slices(data2_npArray, axesLimits=data_axes2, horiz_slice=hor_slice_q)
+        #x2, y2 = g.integrate_plt_slices(start = hor_slice_q - step, stop= hor_slice_q + step, data=data2_npArray, axLim=data_axes2, labelname=i, num=20, horiz_slice=True)
+        x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = 0.085, x_max=0.137)
+
+        y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
+
+        # Plot with label and custom color
+        plt.plot(x2_norm, y_s, label = "Experiment", color='black')
+
+
+    # Improve legend and axis formatting
+    plt.legend(title="Form Factor", fontsize=9, ncol=2)  # 2-column legend if many datasets
+    plt.ylim(bottom=2e-6)
+    plt.xlim(left=0.055)
+    plt.ylabel("Normalized Intensity", fontsize=11)
+    plt.xlabel(r"$Q_{y}\;(1/{\rm nm})$", fontsize=11)
+    plt.title(rf"Horizontal Slices Along $Q_{{z}}$", fontsize=12)
+    plt.yscale("log")
+    #plt.xscale("log")
+    plt.grid(which="both", ls="--", lw=0.5, alpha=0.6)
+    plt.tight_layout()
+
+def vert_slice_comparison(vert_slice_q_array, data_npArrays, data_axes_array, data2_npArray=None, data_axes2=None, xmin = 0.0, xmax = 0.0, labels = None):
+    """Inputs:
+    vert_slice_q: will take max of this vert slice value and use for horizontal slice value
+    data_npArrays: array of dataset to be compared
+    data_axes: axes of data (g2.get_axes_limits(result, ba.Coords_QSPACE) for simulation) and realData_axes_month for experimental data
+    data2_npArrays: designed to add one other dataset that has a different axis e.g. adding one experiment to varying sim parameter
+    data2_axes2: designed to add one other dataset that has a different axis e.g. adding one experiment to varying sim parameter
+    """
+    plt.figure(figsize=(7,5))
+
+    n_datasets = len(data_npArrays)
+    #cmap = cm.get_cmap("rainbow", n_datasets)  # evenly spaced colors from jet colormap
+    cmap = ['red', 'green', 'purple', 'blue', 'orange']
+    for i, (data, data_axes, vert_slice_q) in enumerate(zip(data_npArrays, data_axes_array, vert_slice_q_array)):
+        
+        step = 0.001
+        
+        x2, y2 = g.plot_slices(data, axesLimits=data_axes, vert_slice=vert_slice_q)
+        #x2, y2 = g.integrate_plt_slices(start = vert_slice_q - step, stop= vert_slice_q + step, data=data, axLim=data_axes, labelname=i, num=20, vert_slice=True)
+        
+        x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = 0.1, x_max=2.5)
+        #x2_norm, y2_norm = x2, y2
+        #y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
+
+        # Get color from colormap
+        color = cmap[i]#cmap(i)
+
+        # Plot with label and custom color
+        plt.plot(x2_norm, y2_norm, label = labels[i], color=color)
+
+    if data2_npArray is not None:
+        
+        step = 0.01
+        # Now take horizontal slice through that maximum
+        x2, y2 = g.plot_slices(data2_npArray, axesLimits=data_axes2, vert_slice=vert_slice_q)
+        x2, y2 = g.integrate_plt_slices(start = vert_slice_q - step, stop= vert_slice_q + step, data=data2_npArray, axLim=data_axes2, labelname=i, num=20, vert_slice=True)
+        x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = xmin, x_max=xmax)
+
+        y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
+
+        # Plot with label and custom color
+        plt.plot(x2_norm, y_s, label = "Experiment", color='black')
+
+
+    # Improve legend and axis formatting
+    plt.legend(title="Form Factor", fontsize=9, ncol=2)  # 2-column legend if many datasets
+    plt.ylim(bottom=2e-6)
+    #plt.xlim(left=0.055)
+    plt.ylabel("Normalized Intensity", fontsize=11)
+    plt.xlabel(r"$Q_{y}\;(1/{\rm nm})$", fontsize=11)
+    plt.title(rf"Horizontal Slices Along $Q_{{z}}$", fontsize=12)
+    plt.yscale("log")
+    #plt.xscale("log")
     plt.grid(which="both", ls="--", lw=0.5, alpha=0.6)
     plt.tight_layout()

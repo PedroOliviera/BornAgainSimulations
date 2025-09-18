@@ -124,9 +124,9 @@ def get_sample():
     #surface_layout1 = ba.ParticleLayout()
     surface_layout2 = ba.ParticleLayout()
     for PS_diameter, PS_height, weight_K in zip(PS_diameters, PS_heights, weight_Ks):
-        #ff_PS = ba.HemiEllipsoid(PS_diameter/2 * nm, PS_diameter/2 * nm, PS_height * nm)
+        ff_PS = ba.HemiEllipsoid(PS_diameter/2 * nm, PS_diameter/2 * nm, PS_height * nm)
         #ff_PS = CustomFormFactor(PS_diameter/2*nm, PS_height*nm)
-        ff_PS = ba.CosineRippleGauss(PS_diameter*nm, PS_diameter*nm, PS_height*nm)
+        #ff_PS = ba.CosineRippleGauss(PS_diameter*nm, PS_diameter*nm, PS_height*nm)
         #ff_PS = ba.Sphere(PS_diameter*nm)
         #ff_PS = ba.Pyramid4(PS_diameter * nm, PS_height * nm, 37*deg)
         #ff_PS = ba.Cone(PS_diameter/2 * nm, PS_height * nm, 37*deg)
@@ -142,9 +142,9 @@ def get_sample():
     spacing2 = 104*nm
     coherence_length = 1000*nm
     omega_order = 12*nm
-    #get_interference_2D_para(surface_layout2, spacing2, coherence_length, omega_order)
+    get_interference_2D_para(surface_layout2, spacing2, coherence_length, omega_order)
     #get_interference_radial(surface_layout1, spacing1, coherence_length, omega_order)
-    get_interference_radial(surface_layout2, spacing2, coherence_length, omega_order)
+    #get_interference_radial(surface_layout2, spacing2, coherence_length, omega_order)
     #Add Layers
     PS_brush_thickness = 2*nm
 
@@ -165,9 +165,9 @@ def get_sample():
 
 def main():         
     
-    exp_data_directory = r'C:\Users\Pedro\BornAgainSimulations\data\exp-npz'
+    exp_data_directory = r'C:\BornAgainSimulations\data\exp-npz'
     
-    exp_filename = '4824_3gPL_2000RPM_0p1Deg.npz'
+    exp_filename = 'Si_0p2deg.npz'
     exp2D, exp_axes = g.load_npz_data(exp_filename, exp_data_directory)
     region = [150, 150, 200, 300]
     #simulation_line = g.get_simulation_line(sample_model=get_sample(), 
@@ -177,30 +177,32 @@ def main():
     #                                        center_vertical_slice_values= [0.125],
     #                                        number_slices=10,beamIntensity=1e13)
 
-    simulation_2D = g.get_simulation_2D(sample_model=get_sample(), detectorDistBeamtime= 'dec', angle = 0.1, beamIntensity = 1e12,ROI=region, oneThread=True)
+    simulation_2D = g.get_simulation_2D(sample_model=get_sample(), detectorDistBeamtime= 'dec', angle = 0.2, beamIntensity = 1e12,ROI=region, oneThread=False)
     result = simulation_2D.simulate()
     simul_dat = result.extracted_field()
     final_array = simul_dat.npArray()
     
-    save_filename = "monolayer_CosineRippleGauss.npz"
+    save_filename = "monolayer_Hemiellipsoid.npz"
     simulationDataAxes = g.get_axes_limits(result, ba.Coords_QSPACE)
-    save_sim_directory = r'C:\Users\Pedro\BornAgainSimulations\data\sim-npz'
+    save_sim_directory = r'C:\BornAgainSimulations\data\sim-npz'
     
     g.save_npz_data(os.path.join(save_sim_directory, save_filename), final_array, simulationDataAxes)
     sim2D, simAxes, params = g.load_npz_data(save_filename, save_sim_directory, return_date=False, return_params=True)
 
-    #linecut1 = 0.2
-    linecut2 = 0.2
+    linecut1 = 0.31
+    linecut2 = 0.0829
 
     graphing.plot2D(realData=exp2D, 
                 simulationData=sim2D, 
                 realDat_axes=exp_axes, 
-                simData_axes=simAxes, 
+                simData_axes=simAxes,
+                L1_qz=linecut1,
+                L2_qy=linecut2,
                 zlim=[15,66000])
     graphing.linecutsItoV(simulation_data=sim2D, 
                       experimental_data=exp2D, 
                       #L2_qy=linecut2,
-                      #L1_qz=linecut1, 
+                      L1_qz=linecut1, 
                       L2_qy=linecut2,
                       #L5_qz=linecut5, 
                       axes_exp=exp_axes, 
