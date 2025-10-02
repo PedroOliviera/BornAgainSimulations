@@ -288,6 +288,8 @@ def plot_qy_linecut(ax, qy, simulation_data, experimental_data, axes_sim, axes_e
 
     if save is True:
         np.savez(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}_{savefname}.npz', x=x, y=y, x_unit="1/nm", y_unit="a.u.")
+        save_data = np.column_stack((x, y))
+        np.savetxt(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}_{savefname}.txt', save_data)
 
     ax.set_ylabel("Intensity")
     ax.set_xlabel(r'$Q_{y} \;(1/{\rm nm})$')
@@ -334,6 +336,8 @@ def plot_qz_linecut(ax, qz, simulation_data, experimental_data, axes_sim, axes_e
     
     if save is True:
         np.savez(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}_{savefname}.npz', x=x, y=y, x_unit="1/nm", y_unit="a.u.")
+        save_data = np.column_stack((x, y))
+        np.savetxt(f'lineprofile_linecut_{ROMAN_NUMERALS[linecut_index]}_{savefname}.txt', save_data)
 
     ax.set_ylabel("Intensity")
     ax.set_xlabel(r'$Q_{z} \;(1/{\rm nm})$')

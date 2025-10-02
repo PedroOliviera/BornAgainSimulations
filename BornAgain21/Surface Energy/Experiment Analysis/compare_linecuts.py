@@ -25,16 +25,16 @@ for linecut1, linecut2, label, fname in zip(linecuts1, linecuts2, labels, exp_fi
     graphing.linecutsItoV(experimental_data=exp_2d, L1_qz=linecut1, L2_qy=linecut2, axes_exp=exp_axes, save=True, savefname = label)
     graphing.plt.title(label)
 
-'''
+
 graphing.hor_slice_comparison(hor_slice_q_array=linecuts1, 
                               data_npArrays=exp_2d_array, 
                               data_axes_array=exp_axes_array, 
                               xmin=0.06, xmax=0.125, labels=labels)
 graphing.plt.xlim(right=0.6)
 graphing.plt.ylim(bottom=0.000343)
-'''
-graphing.vert_slice_comparison(vert_slice_q_array=linecuts2, 
-                               data_npArrays=exp_2d_array,
-                               data_axes_array=exp_axes_array, 
-                               xmin=0.1, xmax=0.6, labels=labels)
+
+#graphing.vert_slice_comparison(vert_slice_q_array=linecuts2, 
+#                               data_npArrays=exp_2d_array,
+#                               data_axes_array=exp_axes_array, 
+#                               xmin=0.1, xmax=0.6, labels=labels)
 graphing.plt.show()
