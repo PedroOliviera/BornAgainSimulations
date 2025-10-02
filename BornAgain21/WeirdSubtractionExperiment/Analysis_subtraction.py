@@ -14,6 +14,7 @@ for fname in exp_filenames:
 '''
 
 linecuts1 = [0.26, 0.26] #0.275 - 0.33 - 0.822 SiN 0.44 Mica
+#linecuts1 = [0.285, 0.285]
 linecuts2 = [0.093, 0.091]
 
 for linecut1, linecut2, label, fname in zip(linecuts1, linecuts2, labels, exp_filenames):
