@@ -19,9 +19,6 @@ g.tifToNpzConversion(exp_filename_Si, exp_data_directory, 'dec', 0.2)
 
 exp_data_directory = r'C:\BornAgainSimulations\data\tif'
 
-exp_filename_Si1 = '33_15deg.tif'
-exp_filename_Si2 = '35_15deg.tif'
+exp_filename_Si1 = 'Mica_4824_2000RPM_3mgPml_0p35deg.tif'
 
-
-g.tifToNpzConversion(exp_filename_Si1, exp_data_directory, 'feb', 0.15)
-g.tifToNpzConversion(exp_filename_Si2, exp_data_directory, 'feb', 0.15)
+g.tifToNpzConversion(exp_filename_Si1, exp_data_directory, 'feb', 0.35)

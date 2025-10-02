@@ -7,6 +7,8 @@ import matplotlib.colors as mcolors
 from scipy.signal import savgol_filter
 import numpy as np
 from typing import Optional, Tuple
+from scipy.signal import find_peaks
+from scipy.ndimage import gaussian_filter1d
 
 # Roman numerals for subplot titles
 ROMAN_NUMERALS = ["I", "II", "III", "IV", "V"]
@@ -396,7 +398,7 @@ def plot2D(
     realData=None,
     simulationData=None,
     realDat_axes=None,
-    simData_axes = None,
+    simData_axes=None,
     graphed_axes=[-1, 1, 0, 2],
     L1_qz=None, L2_qy=None, L3_qz=None, L4_qy=None, L5_qz=None,
     title="",
@@ -404,15 +406,14 @@ def plot2D(
 ):
     if simulationData is None and realData is None:
         print("No data provided.")
-        return
+        return None, None
 
     datasets = []
     axes_list = []
-
     if simulationData is not None:
         datasets.append(("Simulation", simulationData))
-        axes_list.append(simData_axes) #g2.get_axes_limits(result, ba.Coords_QSPACE))
-        graphed_axes = simData_axes # g2.get_axes_limits(result, ba.Coords_QSPACE)
+        axes_list.append(simData_axes)
+        graphed_axes = simData_axes
     if realData is not None:
         datasets.append(("Experiment", realData))
         axes_list.append(realDat_axes)
@@ -420,9 +421,11 @@ def plot2D(
     n = len(datasets)
     plt.figure(figsize=(7.5 * n, 6))
 
-    # Linecut definitions with labels
     vert_lines = [(L2_qy, 'II'), (L4_qy, 'IV')]
     horiz_lines = [(L1_qz, 'I'), (L3_qz, 'III'), (L5_qz, 'V')]
+
+    exp_ax = None
+    sim_ax = None
 
     for i, ((label, data), axes) in enumerate(zip(datasets, axes_list)):
         plt.subplot(1, n, i + 1)
@@ -438,22 +441,24 @@ def plot2D(
             with_cb=True,
             cmap='gist_ncar'
         )
-        ax = im.axes
-        ax.set_title(label if label == "Experiment" else f"{label}: {title}", fontsize=14)
+        ax = im.axes  # or: ax = plt.gca()
+        if label == "Experiment":
+            exp_ax = ax
+        else:
+            sim_ax = ax
 
+        ax.set_title(label if label == "Experiment" else f"{label}: {title}", fontsize=14)
         ax.set_xlim(graphed_axes[0], graphed_axes[1])
         ax.set_ylim(graphed_axes[2], graphed_axes[3])
         ax.xaxis.label.set_fontsize(14)
         ax.yaxis.label.set_fontsize(14)
 
-        # Draw vertical (qy) linecuts
         for qy, roman in vert_lines:
             if qy is not None:
                 ax.axvline(x=qy, color='red', linewidth=1)
                 ax.text(qy, graphed_axes[2], f'{roman}', color='red',
                         fontsize=12, ha='center', va='bottom', rotation=90)
 
-        # Draw horizontal (qz) linecuts
         for qz, roman in horiz_lines:
             if qz is not None:
                 ax.axhline(y=qz + 0.005, color='blue', linewidth=1)
@@ -462,6 +467,7 @@ def plot2D(
                         fontsize=12, ha='left', va='center')
 
     plt.tight_layout()
+    return exp_ax, sim_ax
 
 def plot2D_simulationComparison(
     realData=None,
@@ -670,34 +676,33 @@ def vert_slice_comparison(vert_slice_q_array, data_npArrays, data_axes_array, da
     plt.figure(figsize=(7,5))
 
     n_datasets = len(data_npArrays)
-    #cmap = cm.get_cmap("rainbow", n_datasets)  # evenly spaced colors from jet colormap
-    cmap = ['red', 'green', 'purple', 'blue', 'orange']
+    cmap = cm.get_cmap("rainbow", n_datasets)  # evenly spaced colors from jet colormap
+    #cmap = ['red', 'green', 'purple', 'blue', 'orange']
     for i, (data, data_axes, vert_slice_q) in enumerate(zip(data_npArrays, data_axes_array, vert_slice_q_array)):
         
         step = 0.001
         
         x2, y2 = g.plot_slices(data, axesLimits=data_axes, vert_slice=vert_slice_q)
-        #x2, y2 = g.integrate_plt_slices(start = vert_slice_q - step, stop= vert_slice_q + step, data=data, axLim=data_axes, labelname=i, num=20, vert_slice=True)
-        
+        x2, y2 = g.integrate_plt_slices(start = vert_slice_q - step, stop= vert_slice_q + step, data=data, axLim=data_axes, labelname=i, num=20, vert_slice=True)
+        y2 = savgol_filter(y2, window_length=30, polyorder=3, mode="interp")
         x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = 0.1, x_max=2.5)
         #x2_norm, y2_norm = x2, y2
-        #y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
+        
 
         # Get color from colormap
-        color = cmap[i]#cmap(i)
+        color = cmap(i)#cmap[i]
 
         # Plot with label and custom color
         plt.plot(x2_norm, y2_norm, label = labels[i], color=color)
-
+        #plt.plot(y2_norm)
     if data2_npArray is not None:
         
-        step = 0.01
         # Now take horizontal slice through that maximum
         x2, y2 = g.plot_slices(data2_npArray, axesLimits=data_axes2, vert_slice=vert_slice_q)
         x2, y2 = g.integrate_plt_slices(start = vert_slice_q - step, stop= vert_slice_q + step, data=data2_npArray, axLim=data_axes2, labelname=i, num=20, vert_slice=True)
         x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = xmin, x_max=xmax)
 
-        y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
+        y_s = savgol_filter(y2_norm, window_length=30, polyorder=3, mode="interp")
 
         # Plot with label and custom color
         plt.plot(x2_norm, y_s, label = "Experiment", color='black')
@@ -711,6 +716,153 @@ def vert_slice_comparison(vert_slice_q_array, data_npArrays, data_axes_array, da
     plt.xlabel(r"$Q_{y}\;(1/{\rm nm})$", fontsize=11)
     plt.title(rf"Horizontal Slices Along $Q_{{z}}$", fontsize=12)
     plt.yscale("log")
-    #plt.xscale("log")
+    plt.xscale("log")
     plt.grid(which="both", ls="--", lw=0.5, alpha=0.6)
     plt.tight_layout()
+
+def vert_slice_linecut_max_finder(vert_slice_q_array, data_npArrays, data_axes_array, data2_npArray=None, data_axes2=None, xmin = 0.0, xmax = 0.0, labels = None):
+    """Inputs:
+    vert_slice_q: will take max of this vert slice value and use for horizontal slice value
+    data_npArrays: array of dataset to be compared
+    data_axes: axes of data (g2.get_axes_limits(result, ba.Coords_QSPACE) for simulation) and realData_axes_month for experimental data
+    data2_npArrays: designed to add one other dataset that has a different axis e.g. adding one experiment to varying sim parameter
+    data2_axes2: designed to add one other dataset that has a different axis e.g. adding one experiment to varying sim parameter
+    """
+    plt.figure(figsize=(7,5))
+
+    n_datasets = len(data_npArrays)
+    cmap = cm.get_cmap("rainbow", n_datasets)  # evenly spaced colors from jet colormap
+    #cmap = ['red', 'green', 'purple', 'blue', 'orange']
+    for i, (data, data_axes, vert_slice_q) in enumerate(zip(data_npArrays, data_axes_array, vert_slice_q_array)):
+        
+        step = 0.001
+        
+        x2, y2 = g.plot_slices(data, axesLimits=data_axes, vert_slice=vert_slice_q)
+        x2, y2 = g.integrate_plt_slices(start = vert_slice_q - step, stop= vert_slice_q + step, data=data, axLim=data_axes, labelname=i, num=20, vert_slice=True)
+        #y2 = savgol_filter(y2, window_length=30, polyorder=3, mode="interp")
+        x2_norm, y2_norm = normalize_by_first_peak(x2, y2, x_min = 0.1, x_max=2.5)
+        
+
+        peaks, _ = find_peaks(y2_norm, width = [100,500], prominence=[0.001, 1000])
+        
+        plt.plot(y2_norm)
+        plt.plot(peaks, x2_norm[peaks], "x")
+
+def find_two_minima_and_midmax(
+    x, y,
+    x_range=None,           # (xmin, xmax) or None
+    x_unit="",              # label for plot
+    fwhm_frac=0.075,        # Gaussian FWHM as fraction of x-span
+    min_width_frac=0.06,    # min trough width (fraction of x-span)
+    min_dist_frac=0.18,     # min spacing between troughs (fraction of x-span)
+    prom_frac=0.006,        # min prominence as fraction of inverted-range
+    plot=True, ax=None,qz=None
+):
+    # 1) prep
+    x = np.asarray(x, float).ravel()
+    y = np.asarray(y, float).ravel()
+    m = np.isfinite(x) & np.isfinite(y)
+    x, y = x[m], y[m]
+    if np.any(np.diff(x) <= 0):
+        idx = np.argsort(x); x, y = x[idx], y[idx]
+    if x_range is not None:
+        xmin, xmax = x_range
+        m = (x >= xmin) & (x <= xmax)
+        x, y = x[m], y[m]
+    if x.size < 10:
+        print("Warning: Too few points after range filtering; plotting curve only.")
+        # Plot raw/smoothed curve if requested, return zeros
+        offset = max(1e-12, -float(np.nanmin(y)) + 1e-12)
+        logy = np.log10(y + offset)
+        dx = float(np.median(np.diff(x))) if x.size > 1 else 1.0
+        xspan = float(x.max() - x.min()) if x.size > 1 else 1.0
+        sigma_samples = max(1.0, (fwhm_frac * xspan) / (2.355 * max(dx, 1e-12)))
+        logy_s = gaussian_filter1d(logy, sigma=sigma_samples, mode="nearest") if x.size > 1 else logy
+        if plot:
+            if ax is None:
+                fig, ax = plt.subplots(figsize=(9, 4.5))
+            else:
+                fig = ax.figure
+            ax.plot(x, logy, lw=1, label="log10(raw + offset)")
+            ax.plot(x, logy_s, lw=2, label=f"log10 smoothed (FWHM≈{fwhm_frac*100:.1f}% span)")
+            ax.set_xlabel(f"x ({x_unit})"); ax.set_ylabel("log10(intensity)")
+            if qz is not None:
+                ax.set_title(f"At qz= {qz}")
+            ax.legend(); fig.tight_layout()
+        return (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)
+
+    # 2) log10 with safe offset
+    offset = max(1e-12, -float(np.nanmin(y)) + 1e-12)
+    logy = np.log10(y + offset)
+
+    # 3) symmetric Gaussian smoothing in x-units (zero phase)
+    dx = float(np.median(np.diff(x)))
+    xspan = float(x.max() - x.min()) if x.max() > x.min() else 1.0
+    sigma_samples = max(1.0, (fwhm_frac * xspan) / (2.355 * max(dx, 1e-12)))
+    logy_s = gaussian_filter1d(logy, sigma=sigma_samples, mode="nearest")
+
+    # 4) minima = peaks on inverted smoothed curve
+    inv = -logy_s
+    rng = float(inv.max() - inv.min())
+    prominence = max(1e-12, prom_frac * rng)
+    min_width_samples = max(5, int(round((min_width_frac * xspan) / max(dx, 1e-12))))
+    min_dist_samples  = max(10, int(round((min_dist_frac  * xspan) / max(dx, 1e-12))))
+    mins_idx, props = find_peaks(inv, prominence=prominence,
+                                 width=min_width_samples, distance=min_dist_samples)
+
+    # --- minimal change starts here ---
+    if mins_idx.size < 2:
+        print(f"Warning: Found {mins_idx.size} minima; plotting without minima markers.")
+        # Still plot the curves
+        if plot:
+            if ax is None:
+                fig, ax = plt.subplots(figsize=(9, 4.5))
+            else:
+                fig = ax.figure
+            ax.plot(x, logy, lw=1, label="log10(raw + offset)")
+            ax.plot(x, logy_s, lw=2, label=f"log10 smoothed (FWHM≈{fwhm_frac*100:.1f}% span)")
+            ax.set_xlabel(f"x ({x_unit})"); ax.set_ylabel("log10(intensity)")
+            if qz is not None:
+                ax.set_title(f"At qz= {qz}")
+            ax.legend(); fig.tight_layout()
+
+        # Return zeros for any missing extremum.
+        if mins_idx.size == 0:
+            return (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)
+        else:
+            # one minimum found -> return it for left_min, zeros for mid and right
+            i0 = int(mins_idx[0])
+            left_min = (float(x[i0]), float(logy_s[i0]))
+            return left_min, (0.0, 0.0), (0.0, 0.0)
+    # --- minimal change ends here ---
+
+    # keep top 2 by prominence, then sort by x
+    order = np.argsort(props["prominences"])[::-1]
+    mins_idx = np.sort(mins_idx[order][:2])
+
+    # 5) mid maximum between the two minima (on smoothed curve)
+    i0, i1 = int(mins_idx[0]), int(mins_idx[1])
+    jmax = int(i0 + np.argmax(logy_s[i0:i1+1]))
+
+    # 6) package results: (x, log10-intensity) tuples
+    left_min  = (float(x[i0]), float(logy_s[i0]))
+    right_min = (float(x[i1]), float(logy_s[i1]))
+    mid_max   = (float(x[jmax]), float(logy_s[jmax]))
+
+    # 7) plot (only add markers when we have both minima)
+    if plot:
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(9, 4.5))
+        else:
+            fig = ax.figure
+        ax.plot(x, logy, lw=1, label="log10(raw + offset)")
+        ax.plot(x, logy_s, lw=2, label=f"log10 smoothed (FWHM≈{fwhm_frac*100:.1f}% span)")
+        ax.plot([left_min[0], right_min[0]], [left_min[1], right_min[1]], "o", ms=9, label="selected minima")
+        ax.plot([mid_max[0]], [mid_max[1]], "s", ms=9, label="max between")
+        ax.set_xlabel(f"x ({x_unit})"); ax.set_ylabel("log10(intensity)")
+        if qz is not None:
+            ax.set_title(qz)
+        ax.legend(); fig.tight_layout()
+
+    return left_min, mid_max, right_min
+

@@ -68,7 +68,7 @@ def get_sample_step3(P):
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
     spacing = 63*nm
-    num_samples = 100
+    num_samples = 1
 
     # Minimal test — adjust file path as needed
     lineprofile_dir =  r"C:\Users\Pedro\Data Transfer\Lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
