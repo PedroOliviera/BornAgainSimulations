@@ -1,10 +1,10 @@
-import GISAXS_setup_v21 as g
-import Graphing_Analysis as graphing
+from GISAXS_Analysis import GISAXS_setup_v21 as g
+from GISAXS_Analysis import Graphing_Analysis as graphing
 from bornagain import ba_plot as bp, ba_fitmonitor, deg, angstrom, nm
 import bornagain as ba
 from bornagain import nm, deg
 import matplotlib.pyplot as plt
-import height_radius_from_lineprofiles as h_r
+from GISAXS_Analysis import height_radius_from_lineprofiles as h_r
 import numpy as np
 import cmath
 from scipy.special import j0  # Bessel J0
@@ -56,10 +56,15 @@ def get_sample_step2(P):
 
 def get_sample_step3(P):
 
-    omega_order = P["omega_order"]
-    surface_density = P["surface_density"]
-    dampening_length = P["dampening_length"]
-    PS_delta = P["PS_delta"]
+    #omega_order = P["omega_order"]
+    #surface_density = P["surface_density"]
+    #dampening_length = P["dampening_length"]
+    #PS_delta = P["PS_delta"]
+
+    omega_order = 5*nm
+    surface_density = 0.0003
+    dampening_length = 400*nm
+    PS_delta = 2.50267703E-06
 
     material_PS = ba.RefractiveMaterial("PS", PS_delta, 2.46904652E-09)
     #material_P2VP = ba.RefractiveMaterial("P2VP", 3E-06, 2.46904652E-09)
@@ -68,16 +73,17 @@ def get_sample_step3(P):
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
     spacing = 63*nm
-    num_samples = 10
+    num_samples = 1
 
     # Minimal test — adjust file path as needed
-    lineprofile_dir =  r"C:\Users\Pedro\Data Transfer\Lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
 
     xc, yc = h_r.load_lineprofiles(lineprofile_dir)
     hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
 
     diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
-    
+    h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+    h_r.plt.show()
     
     #########################################----SURFACE PARTICLES----################################################
     surface_layout = ba.ParticleLayout()
@@ -171,7 +177,7 @@ def get_sim_fitting_step3(P):
     return sim
 
 def run_fitting_step2(i):
-    realData_npArray, realDat_axes_Feb = g.loadSim("sample35_13deg.npz")
+    realData_npArray, realDat_axes_Feb = g.load_npz_data("sample35_13deg.npz")
     fit_objective = ba.FitObjective()
 
     P = ba.Parameters()
@@ -201,12 +207,12 @@ def run_fitting_step2(i):
     save_filename = "fitting_Run5_Genetic_0p062LC4_1p5LC3_" + str(i) + ".npz"
     simulationDataAxes = g.get_axes_limits(final_result, ba.Coords_QSPACE)
 
-    g.saveSim(save_filename, final_array, simulationDataAxes, params=finalP)   
+    g.save_npz_data(save_filename, final_array, simulationDataAxes, params=finalP)   
     print("DONE")
     print(finalP)
 
 def run_fitting_step3(i):
-    realData_npArray, realDat_axes_Feb = g.loadSim(r"C:\Users\Pedro\Data Transfer\Sample_35_3secIntegration\sample35_13deg.npz")
+    realData_npArray, realDat_axes_Feb = g.load_npz_data("35_15deg.npz", r"C:\BornAgainSimulations\data\exp-npz")
     fit_objective = ba.FitObjective()
 
     P = ba.Parameters()
@@ -238,7 +244,7 @@ def run_fitting_step3(i):
     save_filename = "step3_genetic_run1" + str(i) + ".npz"
     simulationDataAxes = g.get_axes_limits(final_result, ba.Coords_QSPACE)
 
-    g.saveSim(save_filename, final_array, simulationDataAxes, params=finalP)   
+    g.save_npz_data(save_filename, final_array, simulationDataAxes, params=finalP)   
     print("DONE")
     print(finalP)
 
@@ -249,7 +255,7 @@ def main():
     horizontal_slices=[1.5]
     vertical_slices=[0.0]
     #'''
-    simulation_line = g.get_simulation_line(sample_model=get_sample(number_of_samples), 
+    simulation_line = g.get_simulation_line(sample_model=get_sample_step3(number_of_samples), 
                                             detectorDistBeamtime='feb', 
                                             angle_of_incidence= 0.13, 
                                             center_horizontal_slice_values=horizontal_slices, 
@@ -270,8 +276,9 @@ def main():
     save_filename = "test.npz"
     simulationDataAxes = g.get_axes_limits(result, ba.Coords_MM)
 
-    g.saveSim(save_filename, final_array, simulationDataAxes)
+    g.save_npz_data(save_filename, final_array, simulationDataAxes)
     print("DONE")
 
 i=1
-run_fitting_step3(i)
+#run_fitting_step3(i)
+main()
