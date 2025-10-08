@@ -1,14 +1,17 @@
 from GISAXS_Analysis import GISAXS_setup_v21 as g
 from GISAXS_Analysis import Graphing_Analysis as graphing
 import numpy as np
+import argparse
+import sys
+import os 
 
 exp_data_directory = r'C:\BornAgainSimulations\data\exp-npz'
     
 
 exp_2d_array = []
 exp_axes_array = []
-exp_filename = 'Sapphire_4824_2000RPM_3mgPml_0p15deg.npz'
-labels = ['Sapphire']
+exp_filename = 'Quartz_10deg.npz'
+labels = ['Quartz']
 label = labels[0]
 
 # First load in file data and plot 2D
@@ -22,8 +25,9 @@ exp_ax, _ = graphing.plot2D(
 graphing.plt.show(block=False)
 
 #Find qz value of Yoneda band in plot - plot horizontal lineprofile
+
 qz = float(input("Input qz value from 2D data for yoneda: "))
-#qz = 0.896
+qz = 0.575
 
 graphing.plt.close()
 graphing.hor_slice_comparison(hor_slice_q_array=[qz], 
@@ -41,8 +45,8 @@ linecut = ''
 #    linecut = float(input("Input x values of maxima in yoneda band (input 100 when done)"))
 #    linecuts.append(linecut)
 graphing.plt.close()
-#linecuts = [0.0907,0.1575,0.1815, 0.237]
-linecuts = [0.0895,0.154, 0.176, 0.237]
+linecuts = [0.09274,0.1597,0.18165, 0.24375,0.326761]
+#linecuts = [0.0895,0.154, 0.176, 0.237]
 exp_2d_array = [exp_2d for linecut in linecuts]
 exp_axes_array = [exp_axes for linecut in linecuts]
 labels = [label for linecut in linecuts]
@@ -80,6 +84,9 @@ for qz in linecuts:
         num=1,
         vert_slice=True
     )
+
+    #save_data = np.column_stack((x_qy, I))
+    #np.savetxt(labels[0] + '.txt', save_data)
 
     # find minima & mid-maximum along qy (don’t open a new figure)
     left_min, mid_max, right_min = graphing.find_two_minima_and_midmax(

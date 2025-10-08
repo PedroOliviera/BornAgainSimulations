@@ -7,8 +7,8 @@ exp_data_directory = r'C:\BornAgainSimulations\data\exp-npz'
 
 exp_2d_array = []
 exp_axes_array = []
-exp_filename = 'Mica_15deg.npz'
-labels = ['Mica']
+exp_filename = 'SiN_10deg.npz'
+labels = ['SiN']
 label = labels[0]
 
 # First load in file data and plot 2D
@@ -42,7 +42,10 @@ linecut = ''
 #    linecuts.append(linecut)
 graphing.plt.close()
 #linecuts = [0.09582,0.1675,0.1925,0.255,0.344] - 35deg
-linecuts = [0.097, 0.1678, 0.255, 0.338] # - 10 deg
+#linecuts = [0.09274, 0.1597, 0.18165, 0.24375,0.32676] # Quartz - 10 deg
+#linecuts = [0.09, 0.1565, 0.2363] #Sapphire - 10 deg
+#linecuts = [0.0842, 0.151, 0.2324, 0.31] #Silicon - 10 deg
+linecuts = [0.0947, 0.1618, 0.25]#, 0.337]
 
 exp_2d_array = [exp_2d for linecut in linecuts]
 exp_axes_array = [exp_axes for linecut in linecuts]
@@ -68,7 +71,17 @@ ys = []   # qy extrema for plotting on y-axis
 # NEW: keep separate series for the three tracks (for line fitting)
 qz_mid,   qy_mid   = [], []
 
-for qz in linecuts:
+#mid_max = [0.33258, 0.46655, 0.57404, 0.71112] # Quartz first peak
+#mid_max = [0.94946, 1.12704, 1.17377, 1.30307, 1.51025] # Quartz second peak
+
+#mid_max = [0.3357, 0.44163, 0.56157] # Sapphire first peak
+#mid_max = [0.89493, 1.0694, 1.22051] # Sapphire second peak
+
+#mid_max = [0.33869, 0.44501, 0.537, 0.66544] Si first peak
+
+mid_max = [0.317, 0.3871, 0.49566]#, 0.52629] #SiN first peak
+
+for qz, qy in zip(linecuts, mid_max):
     # integrate a thin band around this qz to get a 1D profile vs qy
     x_qy, I = g.integrate_plt_slices(
         start=qz - 1e-4,
@@ -89,8 +102,8 @@ for qz in linecuts:
 
     # function returns (qy, log10I). we want the qy positions
     print("here")
-    mid_max[0] = float(input("Input Mid Max: "))
-    qy_positions = [mid_max[0]]
+    #mid_max[0] = float(input("Input Mid Max: "))
+    qy_positions = [qy]
 
     if sum(qy == 0.0 for qy in qy_positions):
         continue
@@ -125,6 +138,6 @@ _fit_and_plot(exp_ax, qz_mid,   qy_mid,   color="tab:orange", label="Mid max")
 
 # (optional) show legend for the fitted lines
 # exp_ax.legend(loc="best")
-graphing.plt.savefig("Mica_0p15.png", dpi=300)
-graphing.plt.savefig("Mica_0p15.pdf", dpi=300)
+graphing.plt.savefig("SiN_0p1.png", dpi=300)
+graphing.plt.savefig("SiN_0p1.pdf", dpi=300)
 graphing.plt.show()

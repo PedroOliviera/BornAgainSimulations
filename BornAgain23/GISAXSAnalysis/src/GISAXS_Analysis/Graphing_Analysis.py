@@ -1,4 +1,4 @@
-from BornAgain23.GISAXSAnalysis.src.GISAXS_Analysis import GISAXS_setup_v23 as g
+from GISAXS_Analysis import GISAXS_setup_v23 as g
 from matplotlib import pyplot as plt
 from bornagain import ba_plot as bp
 import bornagain as ba
@@ -398,7 +398,7 @@ def linecutsItoV(
     fig.suptitle("Simulation: " + title, fontsize=16)
     plt.subplots_adjust(hspace=0.2, wspace=0.2)
 
-def plot2D(
+def plot2D_q(
     realData=None,
     simulationData=None,
     realDat_axes=None,
@@ -441,6 +441,81 @@ def plot2D(
             intensity_max=zlim[1],
             xlabel=r'$Q_{y} \;(1/{\rm nm})$',
             ylabel=r'$Q_{z} \;(1/{\rm nm})$',
+            zlabel=None,
+            with_cb=True,
+            cmap='gist_ncar'
+        )
+        ax = im.axes  # or: ax = plt.gca()
+        if label == "Experiment":
+            exp_ax = ax
+        else:
+            sim_ax = ax
+
+        ax.set_title(label if label == "Experiment" else f"{label}: {title}", fontsize=14)
+        ax.set_xlim(graphed_axes[0], graphed_axes[1])
+        ax.set_ylim(graphed_axes[2], graphed_axes[3])
+        ax.xaxis.label.set_fontsize(14)
+        ax.yaxis.label.set_fontsize(14)
+
+        for qy, roman in vert_lines:
+            if qy is not None:
+                ax.axvline(x=qy, color='red', linewidth=1)
+                ax.text(qy, graphed_axes[2], f'{roman}', color='red',
+                        fontsize=12, ha='center', va='bottom', rotation=90)
+
+        for qz, roman in horiz_lines:
+            if qz is not None:
+                ax.axhline(y=qz + 0.005, color='blue', linewidth=1)
+                ax.axhline(y=qz - 0.005, color='red', linewidth=1)
+                ax.text(graphed_axes[0], qz, f'{roman}', color='black',
+                        fontsize=12, ha='left', va='center')
+
+    plt.tight_layout()
+    return exp_ax, sim_ax
+
+def plot2D_alpha(
+    realData=None,
+    simulationData=None,
+    realDat_axes=None,
+    simData_axes=None,
+    graphed_axes=[-1, 1, 0, 2],
+    L1_qz=None, L2_qy=None, L3_qz=None, L4_qy=None, L5_qz=None,
+    title="",
+    zlim=[22, 5e5]
+):
+    if simulationData is None and realData is None:
+        print("No data provided.")
+        return None, None
+
+    datasets = []
+    axes_list = []
+    if simulationData is not None:
+        datasets.append(("Simulation", simulationData))
+        axes_list.append(simData_axes)
+        graphed_axes = simData_axes
+    if realData is not None:
+        datasets.append(("Experiment", realData))
+        axes_list.append(realDat_axes)
+
+    n = len(datasets)
+    plt.figure(figsize=(7.5 * n, 6))
+
+    vert_lines = [(L2_qy, 'II'), (L4_qy, 'IV')]
+    horiz_lines = [(L1_qz, 'I'), (L3_qz, 'III'), (L5_qz, 'V')]
+
+    exp_ax = None
+    sim_ax = None
+
+    for i, ((label, data), axes) in enumerate(zip(datasets, axes_list)):
+        plt.subplot(1, n, i + 1)
+
+        im = bp.plot_array(
+            data,
+            axes_limits=axes,
+            intensity_min=zlim[0],
+            intensity_max=zlim[1],
+            xlabel=r"$\varphi_f$ (deg)",
+            ylabel=r"$\alpha_f$ (deg)",
             zlabel=None,
             with_cb=True,
             cmap='gist_ncar'

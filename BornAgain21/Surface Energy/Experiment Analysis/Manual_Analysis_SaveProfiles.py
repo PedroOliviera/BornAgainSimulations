@@ -1,6 +1,10 @@
 from GISAXS_Analysis import GISAXS_setup_v21 as g
 from GISAXS_Analysis import Graphing_Analysis as graphing
 import numpy as np
+import argparse
+import sys
+import os 
+from scipy.signal import savgol_filter
 
 exp_data_directory = r'C:\BornAgainSimulations\data\exp-npz'
     
@@ -8,9 +12,9 @@ exp_data_directory = r'C:\BornAgainSimulations\data\exp-npz'
 exp_2d_array = []
 exp_axes_array = []
 exp_filename = 'Mica_15deg.npz'
-labels = ['Mica']
+labels = ['Mica_0p15deg']
 label = labels[0]
-
+print(exp_filename)
 # First load in file data and plot 2D
 exp_2d, exp_axes = g.load_npz_data(exp_filename, exp_data_directory)
 exp_ax, _ = graphing.plot2D(
@@ -22,10 +26,11 @@ exp_ax, _ = graphing.plot2D(
 graphing.plt.show(block=False)
 
 #Find qz value of Yoneda band in plot - plot horizontal lineprofile
-#qz = float(input("Input qz value from 2D data for yoneda: "))
-qz = 0.896
 
-graphing.plt.close()
+qz = float(input("Input qz value from 2D data for yoneda: "))
+#qz = 0.575
+
+#graphing.plt.close()
 graphing.hor_slice_comparison(hor_slice_q_array=[qz], 
                               data_npArrays=[exp_2d], 
                               data_axes_array=[exp_axes], 
@@ -37,21 +42,20 @@ graphing.plt.show(block=False)
 #Find peaks in yoneda horizontal line profile and use that for vertical slices
 linecuts = []
 linecut = ''
-#while(linecut != 100):
-#    linecut = float(input("Input x values of maxima in yoneda band (input 100 when done)"))
-#    linecuts.append(linecut)
+while(linecut != 100):
+    linecut = float(input("Input x values of maxima in yoneda band (input 100 when done)"))
+    linecuts.append(linecut)
 graphing.plt.close()
-#linecuts = [0.09582,0.1675,0.1925,0.255,0.344] - 35deg
-linecuts = [0.097, 0.1678, 0.255, 0.338] # - 10 deg
-
+#linecuts = [0.09274,0.1597,0.18165, 0.24375,0.326761]
+#linecuts = [0.0895,0.154, 0.176, 0.237]
 exp_2d_array = [exp_2d for linecut in linecuts]
 exp_axes_array = [exp_axes for linecut in linecuts]
 labels = [label for linecut in linecuts]
-graphing.vert_slice_comparison(vert_slice_q_array=linecuts, 
-                               data_npArrays=exp_2d_array,
-                               data_axes_array=exp_axes_array, 
-                               xmin=0.1, xmax=0.6, labels=labels)
-graphing.plt.show()
+#graphing.vert_slice_comparison(vert_slice_q_array=linecuts, 
+#                               data_npArrays=exp_2d_array,
+#                               data_axes_array=exp_axes_array, 
+#                               xmin=0.1, xmax=0.6, labels=labels)
+#graphing.plt.show()
 
 exp_ax, _ = graphing.plot2D(
     realData=exp_2d,
@@ -66,31 +70,39 @@ xs = []   # qz for plotting on x-axis
 ys = []   # qy extrema for plotting on y-axis
 
 # NEW: keep separate series for the three tracks (for line fitting)
+qz_left,  qy_left  = [], []
 qz_mid,   qy_mid   = [], []
+qz_right, qy_right = [], []
 
 for qz in linecuts:
     # integrate a thin band around this qz to get a 1D profile vs qy
+    step = 0.001
     x_qy, I = g.integrate_plt_slices(
-        start=qz - 1e-4,
-        stop=qz + 1e-4,
+        start=qz - step,
+        stop=qz + step,
         data=exp_2d,
         axLim=exp_axes,
         labelname="Experiment",
-        num=1,
+        num=20,
         vert_slice=True
     )
+    y2 = savgol_filter(I, window_length=100, polyorder=2, mode="interp")
+    save_data = np.column_stack((x_qy, y2))
+    print(labels[0])
+    np.savetxt( labels[0] + 'linecut_qz_' + str(qz) + '.txt', save_data)
 
     # find minima & mid-maximum along qy (don’t open a new figure)
     left_min, mid_max, right_min = graphing.find_two_minima_and_midmax(
-        x_qy, I, x_range=(0.1, 2), x_unit="1/nm", qz=qz, plot= False
+        x_qy, I, x_range=(0.27, 2), x_unit="1/nm", qz=qz
     )
     left_min, mid_max, right_min = [0.0], [0.0], [0.0]
     graphing.plt.show(block=False)
 
     # function returns (qy, log10I). we want the qy positions
-    print("here")
-    mid_max[0] = float(input("Input Mid Max: "))
-    qy_positions = [mid_max[0]]
+    #left_min[0] = float(input("Input Left Min: "))
+    #mid_max[0] = float(input("Input Mid Max: "))
+    #right_min[0] = float(input("Input Right Min: "))
+    qy_positions = [left_min[0], mid_max[0], right_min[0]]
 
     if sum(qy == 0.0 for qy in qy_positions):
         continue
@@ -101,8 +113,10 @@ for qz in linecuts:
 
     # NEW: store each track separately (left, mid, right)
     
-    qz_mid.append(qz);    qy_mid.append(qy_positions[0])
-    #graphing.plt.close()
+    qz_left.append(qz);   qy_left.append(qy_positions[0])
+    qz_mid.append(qz);    qy_mid.append(qy_positions[1])
+    qz_right.append(qz);  qy_right.append(qy_positions[2])
+    graphing.plt.close()
 
 # overlay markers on the experiment axes (unchanged)
 exp_ax.scatter(xs, ys, marker="x", s=120, c="w", linewidths=2, zorder=5)
@@ -121,10 +135,11 @@ def _fit_and_plot(ax, x_pts, y_pts, color, label, zorder=4):
     ax.plot(xfit, yfit, color=color, linewidth=2, zorder=zorder, label=f"{label} fit")
     print(f"{label}: slope = {m:.6g}, angle = {angle_deg:.2f}°")
 
+_fit_and_plot(exp_ax, qz_left,  qy_left,  color="tab:cyan",   label="Left minima")
 _fit_and_plot(exp_ax, qz_mid,   qy_mid,   color="tab:orange", label="Mid max")
+_fit_and_plot(exp_ax, qz_right, qy_right, color="tab:green",  label="Right minima")
 
 # (optional) show legend for the fitted lines
 # exp_ax.legend(loc="best")
-graphing.plt.savefig("Mica_0p15.png", dpi=300)
-graphing.plt.savefig("Mica_0p15.pdf", dpi=300)
+
 graphing.plt.show()
