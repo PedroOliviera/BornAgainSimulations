@@ -57,6 +57,42 @@ def get_sample(approximation, p2vp_radius):
     material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.04383115E-06, 7.84182177E-08) #7.644e-06
     material_SiO2 = ba.RefractiveMaterial("SiO2", 4.74631315E-06, 4.16025294E-08)
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
+    material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09) 
+    material_P2VP  = ba.RefractiveMaterial("P2VP", 2.09112645E-06, 2.58315258E-09 ) # 2.49112645E-06, 2.58315258E-09
+    m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
+
+    offset = 7*nm
+    spacing = 63*nm - offset
+    num_samples = 10
+
+    # Minimal test — adjust file path as needed
+    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+
+    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
+
+    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
+    h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+    h_r.plt.show()    
+    
+    #form factor
+    total_thickness = 214*nm
+
+    P2VP_radius_xy = 24 #*nm
+    P2VP_radius_z = P2VP_radius_xy - 14 #*nm
+
+    Factor_xy = 0.32177342  #P2VP_radius_xy / diam_K
+    Factor_z =  1.53874389 #P2VP_radius_z / height_K
+
+    print('factor xy')
+    print(Factor_xy)
+    print('factor z')
+    print(Factor_z)
+
+    for i in range(10):
+        ff_P2VP = ba.Spheroid((diam_K[i] * Factor_xy) * nm, (height_K[i] * Factor_z) * nm)
+        particle_P2VP = ba.Particle(material_P2VP, ff_P2VP)
+        layer_PS_Top.plugLiquid(density * weight_K[i], particle_P2VP, approximation)
 
     #Roughness
     #----------------PS----------------------------------------------------
@@ -127,22 +163,20 @@ def get_sample(approximation, p2vp_radius):
         particle = ba.Particle(material_P2VP, ff)
         layer_PS_Top.plugLiquid(density * parsample.weight, particle, approximation)
     '''
-    p2vp_radius = 15*nm
-    PS_radius = 30*nm
-    core_ff = ba.Sphere(p2vp_radius)
-    shell_ff = ba.Sphere(PS_radius)
+    #p2vp_radius = 15*nm
+    #PS_radius = 30*nm
+    #core_ff = ba.Sphere(p2vp_radius)
+    #shell_ff = ba.Sphere(PS_radius)
     #ff = ba.Spheroid(radius * nm, radius/1.5 * nm)
-    core_particle = ba.Particle(material_P2VP, core_ff)
-    shell_particle = ba.Particle(material_PS, shell_ff)
-    particle = ba.Compound()
-    particle.addComponent(shell_particle)
-    particle.addComponent(core_particle, R3(0, 0, 0))
 
-    layer_PS_Top.plugLiquid(density, particle, approximation)
-
-    #ff = ba.Sphere(radius * nm)
-    
-    #particle = ba.Particle(material_P2VP, ff)
+    #core_particle = ba.Particle(material_P2VP, core_ff)
+    #shell_particle = ba.Particle(material_PS, shell_ff)
+    #compound = ba.Compound()
+    #compound.addComponent(shell_particle)
+    #compound.addComponent(core_particle, R3(0, 0, 15*nm))
+    #compound.setRadius(radius = 30.0*nm)
+    #print(compound.radius())
+    #layer_PS_Top.plugLiquid(density, compound, approximation)
 
     # Sample
     sample = ba.Sample()

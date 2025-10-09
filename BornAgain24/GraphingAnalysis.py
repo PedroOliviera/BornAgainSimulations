@@ -307,7 +307,6 @@ def plot2D(
                         fontsize=12, ha='left', va='center')
 
     plt.tight_layout()
-    plt.show()
 
 def yonedaPlot(vert_slice_q, data_npArrays, data_axes, data2_npArray=None, data_axes2=None):
     """Inputs:
