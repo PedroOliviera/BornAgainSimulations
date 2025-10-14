@@ -65,7 +65,7 @@ def get_sample_withInterior(approximation):
 
     # Materials
     material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09) 
-    material_P2VP  = ba.RefractiveMaterial("P2VP", 2.09112645E-06, 2.58315258E-09 ) # 2.49112645E-06, 2.58315258E-09
+    material_P2VP  = ba.RefractiveMaterial("P2VP", 2.39112645E-06, 2.58315258E-09 ) # 2.49112645E-06, 2.58315258E-09
     material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.04383115E-06, 7.84182177E-08) #7.644e-06
     material_SiO2 = ba.RefractiveMaterial("SiO2", 4.74631315E-06, 4.16025294E-08)
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
@@ -115,14 +115,13 @@ def get_sample_withInterior(approximation):
 
     layer_PS_Top = ba.Layer(material_PS, 214.8*nm, roughness_PS)
 
-    for i in range(10):
-        ff_P2VP = ba.Spheroid((diam_K[i] * Factor_xy) * nm, (height_K[i] * Factor_z) * nm)
-        #ff_P2VP = ba.Sphere(p2vp_radius*nm)
+    for i in range(2):
+        #ff_P2VP = ba.Spheroid((diam_K[i] * Factor_xy) * nm, (height_K[i] * Factor_z) * nm)
+        ff_P2VP = ba.Sphere(23*nm)
         particle_P2VP = ba.Particle(material_P2VP, ff_P2VP)
-        density = max_particle_density(diam_K[i] * Factor_xy*2)
-        layer_PS_Top.plugLiquid(density, particle_P2VP, approximation)
+        density = max_particle_density(23)
+        layer_PS_Top.plugLiquid(density*nm, particle_P2VP, approximation)
 
-    particle_PS = ba.Particle(material_PS, ba.Sphere(10*nm))
     
     # Interior
     iff = ba.InterferenceRadialParacrystal(spacing, 10000*nm)
@@ -135,7 +134,7 @@ def get_sample_withInterior(approximation):
     offset = 7*nm
     spacing = 63*nm - offset
 
-    for i in range(num_samples):
+    for i in range(10):
         R = truncated_radius(height_K[i], diam_K[i] - offset)
         b = 2*R - height_K[i]
         ff_PS = ba.SphericalSegment(R* nm, 0.0*nm, b* nm)
@@ -219,11 +218,11 @@ def get_sample(approximation, p2vp_radius):
     #density *= 0.1
 
     layer_PS_Top = ba.Layer(material_PS, 214.8*nm)
-    for i in range(num_samples):
+    for i in range(1):
         ff_P2VP = ba.Spheroid((diam_K[i] * Factor_xy) * nm, (height_K[i] * Factor_z) * nm)
         #ff_P2VP = ba.Sphere(p2vp_radius*nm)
         particle_P2VP = ba.Particle(material_P2VP, ff_P2VP)
-        density = max_particle_density(diam_K[i] * Factor_xy*2)
+        density = max_particle_density(diam_K[i] * Factor_xy*2 * 1000)
         layer_PS_Top.plugLiquid(density, particle_P2VP, approximation)
 
     #----------------SiO2---------------------------------------------------
@@ -347,8 +346,9 @@ def get_simulation(sample):
 if __name__ == '__main__':
     radi = [10,20,30,40]
     samples = [
-        get_sample(ba.Random3D_PY, 3),
-        #get_sample(ba.Random3D_Dilute, 3),
+        #get_sample(ba.Random3D_PY, 3),
+        #get_sample(ba.Random3D_Dilute, 3)
+        get_sample_withInterior(ba.Random3D_Dilute),
         get_sample_withInterior(ba.Random3D_PY)
         #get_sample(ba.Random3D_PY, 25),
         #get_sample(ba.Random3D_Dilute, 25),

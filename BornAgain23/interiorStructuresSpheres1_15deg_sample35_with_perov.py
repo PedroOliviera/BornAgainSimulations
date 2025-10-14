@@ -67,7 +67,7 @@ def plot_horizontal_slice_simple(
 
 # ---------- USER INPUTS ----------
 exp_dir      = r"C:\BornAgainSimulations\data\exp-npz"
-exp_npz_file = "35_15deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
+exp_npz_file = "34_15deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
 alpha_i_deg  = 0.15
 beamtime     = "feb"
 ROI_deg      = (0, 0, 0.5, 1.75)           # (phi_min, alpha_min, phi_max, alpha_max)
@@ -244,10 +244,17 @@ def sample_radial_paracrystal_truncated(omega_nm=6,#6,
         ff_P2VP = ba.Spheroid((diam_K[i] * Factor_xy) * nm, (height_K[i] * Factor_z) * nm)
         particle_P2VP = ba.Particle(material_P2VP, ff_P2VP)
 
+        particle_FA = ba.Particle(material_FA, ba.Sphere(7*nm))
+        composition = ba.Compound()
+        composition.addComponent(particle_P2VP)
+        composition.addComponent(particle_FA, R3(0,0, height_K[i] * Factor_z))
+
+        surface_layout.addParticle(composition, weight_K[i])
+
         vertical_shift = layer_thickness/2 - P2VP_radius_xy
         particle_P2VP_position = R3(0*nm, 0*nm, vertical_shift)
-        particle_P2VP.translate(particle_P2VP_position)
-        interior_layout.addParticle(particle_P2VP, weight_K[i])
+        composition.translate(particle_P2VP_position)
+        interior_layout.addParticle(composition, weight_K[i])
 
     interior_layout.setTotalParticleSurfaceDensity(density_nm2)
 

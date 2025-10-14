@@ -67,10 +67,10 @@ def plot_horizontal_slice_simple(
 
 # ---------- USER INPUTS ----------
 exp_dir      = r"C:\BornAgainSimulations\data\exp-npz"
-exp_npz_file = "35_15deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
-alpha_i_deg  = 0.15
+exp_npz_file = "32_10deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
+alpha_i_deg  = 0.1
 beamtime     = "feb"
-ROI_deg      = (0, 0, 0.5, 1.75)           # (phi_min, alpha_min, phi_max, alpha_max)
+ROI_deg      = (0, 0, 0.5, 1.75)          # (phi_min, alpha_min, phi_max, alpha_max)
 
 def truncated_radius(h,d):
     """
@@ -85,7 +85,7 @@ def truncated_radius(h,d):
     return R
 
 def sample_radial_paracrystal_CosineRippleGauss(omega_nm=10,#6,
-                              damping_length_nm=10000, density_nm2=0.01): #3.6e-4
+                              damping_length_nm=10000, density_nm2=1e-4): #3.6e-4
     material_PS  = ba.RefractiveMaterial("PS",     3.5e-6, 2.3e-9)
     m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
 
@@ -137,8 +137,8 @@ def sample_radial_paracrystal_CosineRippleGauss(omega_nm=10,#6,
     s.addLayer(sub)
     return s
 
-def sample_radial_paracrystal_hemiellipsoid(omega_nm=6,#6,
-                              damping_length_nm=10000, density_nm2=0.01): #3.6e-4
+def sample_radial_paracrystal_hemiellipsoid(omega_nm=10,#6,
+                              damping_length_nm=10000, density_nm2=3.6e-4): #3.6e-4
     material_PS  = ba.RefractiveMaterial("PS",     3.5e-6, 2.3e-9)
     m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
 
@@ -192,12 +192,138 @@ def sample_radial_paracrystal_hemiellipsoid(omega_nm=6,#6,
 
 
 
-def sample_radial_paracrystal_truncated(omega_nm=6,#6,
-                              damping_length_nm=10000, density_nm2=3.6e-4): #3.6e-4
-    material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09) 
-    material_P2VP  = ba.RefractiveMaterial("P2VP", 2.09112645E-06, 2.58315258E-09 ) # 2.49112645E-06, 2.58315258E-09
+def sample_radial_paracrystal_truncated(omega_nm=10,#6,
+                              damping_length_nm=450, density_nm2=3.6e-4): #3.6e-4
+    material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09)
     m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
-    material_FA  = ba.RefractiveMaterial("PS",     6E-06, 2.353858E-09) 
+
+    offset_diameter =  - 15*nm
+    offset_height = 1*nm
+    spacing = 63*nm + offset_diameter
+    num_samples = 10
+
+    # Minimal test — adjust file path as needed
+    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+
+    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
+
+    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
+    h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+    h_r.plt.show()
+
+    
+    
+    #form factor
+    surface_layout = ba.ParticleLayout(); 
+    for i in range(num_samples):
+        height = height_K[i] + offset_height
+        R = truncated_radius(height, diam_K[i] + offset_diameter)
+        b = 2*R - height
+        ff_PS = ba.SphericalSegment(R* nm, 0.0*nm, b* nm)
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        surface_layout.addParticle(particle_PS, weight_K[i])
+        print(height_K[i])
+        print(diam_K[i])
+        print(R)
+        print(b)
+
+
+    #interference function
+    iff = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf = ba.Profile1DGauss(omega_nm*nm)
+    iff.setProbabilityDistribution(iff_pdf)
+    iff.setKappa(0.65)
+    #Particle Layout
+    surface_layout.setInterference(iff)
+    surface_layout.setTotalParticleSurfaceDensity(density_nm2)
+    
+    #Layers
+    top = ba.Layer(ba.Vacuum())
+    top.addLayout(surface_layout)
+    polymer = ba.Layer(material_PS, 214*nm)
+    sub = ba.Layer(m_substrate)
+    
+    #Sample
+    s = ba.Sample()
+    s.addLayer(top)
+    s.addLayer(polymer)
+    s.addLayer(sub)
+    return s
+
+def sample_radial_paracrystal_truncated_perovskite(omega_nm=10,#6,
+                              damping_length_nm=450, density_nm2=3.6e-4): #3.6e-4
+    material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09)
+    m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
+    material_FA = ba.RefractiveMaterial("FA", 6.0e-6, 7.8e-8)
+
+    offset_diameter =  - 15*nm
+    offset_height = 2*nm
+    spacing = 63*nm + offset_diameter
+    num_samples = 10
+    perovskite_radius = 3*nm
+    # Minimal test — adjust file path as needed
+    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+
+    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
+
+    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
+    h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+    h_r.plt.show()
+
+    
+    
+    #form factor
+
+    perov_np = ba.Particle(material_FA, ba.Sphere(perovskite_radius))
+    
+    surface_layout = ba.ParticleLayout(); 
+    for i in range(num_samples):
+        height = height_K[i] + offset_height
+        R = truncated_radius(height, diam_K[i] + offset_diameter)
+        b = 2*R - height
+        ff_PS = ba.SphericalSegment(R* nm, 0.0*nm, b* nm)
+        particle_PS= ba.Particle(material_PS, ff_PS)
+
+        np_depth = height
+        composition = ba.Compound()
+        composition.addComponent(particle_PS)
+        composition.addComponent(perov_np, R3(0,0, -perovskite_radius))
+
+        surface_layout.addParticle(composition, weight_K[i])
+        print(height_K[i])
+        print(diam_K[i])
+        print(R)
+        print(b)
+
+
+    #interference function
+    iff = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf = ba.Profile1DGauss(omega_nm*nm)
+    iff.setProbabilityDistribution(iff_pdf)
+    iff.setKappa(0.65)
+    #Particle Layout
+    surface_layout.setInterference(iff)
+    surface_layout.setTotalParticleSurfaceDensity(density_nm2)
+    
+    #Layers
+    top = ba.Layer(ba.Vacuum())
+    top.addLayout(surface_layout)
+    polymer = ba.Layer(material_PS, 214*nm)
+    sub = ba.Layer(m_substrate)
+    
+    #Sample
+    s = ba.Sample()
+    s.addLayer(top)
+    s.addLayer(polymer)
+    s.addLayer(sub)
+    return s
+
+def sample_radial_paracrystal_truncated_with_roughness(omega_nm=6,#6,
+                              damping_length_nm=400, density_nm2=3.6e-4): #3.6e-4
+    material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09)
+    m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
 
     offset = 7*nm
     spacing = 63*nm - offset
@@ -211,7 +337,9 @@ def sample_radial_paracrystal_truncated(omega_nm=6,#6,
 
     diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
     h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
-    h_r.plt.show()    
+    h_r.plt.show()
+
+    
     
     #form factor
     surface_layout = ba.ParticleLayout(); 
@@ -221,75 +349,39 @@ def sample_radial_paracrystal_truncated(omega_nm=6,#6,
         ff_PS = ba.SphericalSegment(R* nm, 0.0*nm, b* nm)
         particle_PS= ba.Particle(material_PS, ff_PS)
         surface_layout.addParticle(particle_PS, weight_K[i])
-
-    total_thickness = 214*nm
-    num_layers = 4
-    layer_thickness = total_thickness/num_layers
-    
-
-    P2VP_radius_xy = 24 #*nm
-    P2VP_radius_z = P2VP_radius_xy - 14 #*nm
-
-    Factor_xy = 0.32177342  #P2VP_radius_xy / diam_K
-    Factor_z =  1.53874389 #P2VP_radius_z / height_K
-
-    print('factor xy')
-    print(Factor_xy)
-    print('factor z')
-    print(Factor_z)
-
-    interior_layout = ba.ParticleLayout()
-
-    for i in range(10):
-        ff_P2VP = ba.Spheroid((diam_K[i] * Factor_xy) * nm, (height_K[i] * Factor_z) * nm)
-        particle_P2VP = ba.Particle(material_P2VP, ff_P2VP)
-
-        vertical_shift = layer_thickness/2 - P2VP_radius_xy
-        particle_P2VP_position = R3(0*nm, 0*nm, vertical_shift)
-        particle_P2VP.translate(particle_P2VP_position)
-        interior_layout.addParticle(particle_P2VP, weight_K[i])
-
-    interior_layout.setTotalParticleSurfaceDensity(density_nm2)
+        print(height_K[i])
+        print(diam_K[i])
+        print(R)
+        print(b)
 
 
     #interference function
     iff = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
     iff_pdf = ba.Profile1DGauss(omega_nm*nm)
     iff.setProbabilityDistribution(iff_pdf)
-    iff.setKappa(0.25)
+    iff.setKappa(0.35)
     #Particle Layout
     surface_layout.setInterference(iff)
     surface_layout.setTotalParticleSurfaceDensity(density_nm2)
 
-    #Roughness
-    hurst = 0.49
-    corr = 84*nm
-    sig = 3.2*nm
+    #roughness
+    sig = 3*nm
+    hurst = 0.7
+    corr = 25*nm
     autocorr = ba.SelfAffineFractalModel(sig, hurst, corr)
     transient = ba.ErfTransient()
     roughness = ba.Roughness(autocorr, transient)
-
-
+    
     #Layers
     top = ba.Layer(ba.Vacuum())
     top.addLayout(surface_layout)
-    polymer1 = ba.Layer(material_PS, layer_thickness, roughness)
-    polymer2 = ba.Layer(material_PS, layer_thickness)
-    polymer2.addLayout(interior_layout)
-    polymer3 = ba.Layer(material_PS, layer_thickness)
-    polymer3.addLayout(interior_layout)
-    polymer4 = ba.Layer(material_PS, layer_thickness)
-    polymer4.addLayout(interior_layout)
+    polymer = ba.Layer(material_PS, 214*nm, roughness)
     sub = ba.Layer(m_substrate)
-    sub.addLayout(interior_layout)
-
+    
     #Sample
     s = ba.Sample()
     s.addLayer(top)
-    s.addLayer(polymer1)
-    s.addLayer(polymer2)
-    s.addLayer(polymer3)
-    s.addLayer(polymer4)
+    s.addLayer(polymer)
     s.addLayer(sub)
     return s
 
@@ -358,7 +450,7 @@ ax2.set_ylim(extent_angles[2],extent_angles[3])
 ax1.set_xlim(extent_angles[0],extent_angles[1])
 ax2.set_xlim(extent_angles[0],extent_angles[1])
 
-
-plot_horizontal_slice_simple(alpha_cut_deg=0.1452, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim,sim_extent=extent_angles)
+plt.savefig('cosineRippleGauss.png')
+plot_horizontal_slice_simple(alpha_cut_deg=0.1, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim,sim_extent=extent_angles)
 
 plt.show()

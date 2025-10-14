@@ -67,10 +67,10 @@ def plot_horizontal_slice_simple(
 
 # ---------- USER INPUTS ----------
 exp_dir      = r"C:\BornAgainSimulations\data\exp-npz"
-exp_npz_file = "35_15deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
-alpha_i_deg  = 0.15
+exp_npz_file = "35_10deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
+alpha_i_deg  = 0.1
 beamtime     = "feb"
-ROI_deg      = (0, 0, 1, 2)          # (phi_min, alpha_min, phi_max, alpha_max)
+ROI_deg      = (0, 0, 0.5, 1.75)          # (phi_min, alpha_min, phi_max, alpha_max)
 
 def truncated_radius(h,d):
     """
@@ -85,7 +85,7 @@ def truncated_radius(h,d):
     return R
 
 def sample_radial_paracrystal_CosineRippleGauss(omega_nm=10,#6,
-                              damping_length_nm=10000, density_nm2=0.01): #3.6e-4
+                              damping_length_nm=10000, density_nm2=1e-4): #3.6e-4
     material_PS  = ba.RefractiveMaterial("PS",     3.5e-6, 2.3e-9)
     m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
 
@@ -137,8 +137,8 @@ def sample_radial_paracrystal_CosineRippleGauss(omega_nm=10,#6,
     s.addLayer(sub)
     return s
 
-def sample_radial_paracrystal_hemiellipsoid(omega_nm=6,#6,
-                              damping_length_nm=10000, density_nm2=0.01): #3.6e-4
+def sample_radial_paracrystal_hemiellipsoid(omega_nm=10,#6,
+                              damping_length_nm=10000, density_nm2=3.6e-4): #3.6e-4
     material_PS  = ba.RefractiveMaterial("PS",     3.5e-6, 2.3e-9)
     m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
 
@@ -249,8 +249,73 @@ def sample_radial_paracrystal_truncated(omega_nm=6,#6,
     s.addLayer(sub)
     return s
 
+def sample_radial_paracrystal_truncated_with_roughness(omega_nm=6,#6,
+                              damping_length_nm=400, density_nm2=3.6e-4): #3.6e-4
+    material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09)
+    m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
+
+    offset = 7*nm
+    spacing = 63*nm - offset
+    num_samples = 10
+
+    # Minimal test — adjust file path as needed
+    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+
+    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
+
+    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
+    h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+    h_r.plt.show()
+
+    
+    
+    #form factor
+    surface_layout = ba.ParticleLayout(); 
+    for i in range(num_samples):
+        R = truncated_radius(height_K[i], diam_K[i] - offset)
+        b = 2*R - height_K[i]
+        ff_PS = ba.SphericalSegment(R* nm, 0.0*nm, b* nm)
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        surface_layout.addParticle(particle_PS, weight_K[i])
+        print(height_K[i])
+        print(diam_K[i])
+        print(R)
+        print(b)
+
+
+    #interference function
+    iff = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf = ba.Profile1DGauss(omega_nm*nm)
+    iff.setProbabilityDistribution(iff_pdf)
+    iff.setKappa(0.35)
+    #Particle Layout
+    surface_layout.setInterference(iff)
+    surface_layout.setTotalParticleSurfaceDensity(density_nm2)
+
+    #roughness
+    sig = 3*nm
+    hurst = 0.7
+    corr = 25*nm
+    autocorr = ba.SelfAffineFractalModel(sig, hurst, corr)
+    transient = ba.ErfTransient()
+    roughness = ba.Roughness(autocorr, transient)
+    
+    #Layers
+    top = ba.Layer(ba.Vacuum())
+    top.addLayout(surface_layout)
+    polymer = ba.Layer(material_PS, 214*nm, roughness)
+    sub = ba.Layer(m_substrate)
+    
+    #Sample
+    s = ba.Sample()
+    s.addLayer(top)
+    s.addLayer(polymer)
+    s.addLayer(sub)
+    return s
+
 # ---------- SAMPLE (BA23-compliant) ----------
-sample = sample_radial_paracrystal_truncated()
+sample = sample_radial_paracrystal_CosineRippleGauss()
 
 # ---------- SIMULATE ----------
 sim = g.get_simulation_2D(sample_model=sample,
@@ -295,7 +360,7 @@ else:
     norm = mpl.colors.LogNorm(zmin, zmax)
 
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,5), constrained_layout=True)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8,5), constrained_layout=True)
 
 im1 = ax1.imshow(exp_arr, extent=exp_axes,
                  aspect="auto", norm=norm, cmap='jet')
@@ -314,7 +379,31 @@ ax2.set_ylim(extent_angles[2],extent_angles[3])
 ax1.set_xlim(extent_angles[0],extent_angles[1])
 ax2.set_xlim(extent_angles[0],extent_angles[1])
 
-
 plot_horizontal_slice_simple(alpha_cut_deg=0.209, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim,sim_extent=extent_angles)
 
+
+# ---------- LOAD EXPERIMENT (Q axes) ----------
+exp_arr_high, _ = g.load_npz_data(exp_npz_file, exp_dir)
+exp_axes_high = g.extent_phi_alpha_from_image(exp_arr, 'feb', alpha_i_deg=alpha_i_deg)
+
+sub = exp_arr - I_sim
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8,5), constrained_layout=True)
+
+im1 = ax1.imshow(exp_arr, extent=exp_axes,
+                 aspect="auto", norm=norm, cmap='jet')
+ax1.set_title("Experiment (resampled to φ/α)")
+ax1.set_xlabel(r"$\varphi_f$ (deg)"); ax1.set_ylabel(r"$\alpha_f$ (deg)")
+fig.colorbar(im1, ax=ax1, label="Intensity (a.u.)")
+
+im2 = ax2.imshow(sub, origin= 'lower', extent=extent_angles,
+                 aspect="auto", norm=norm, cmap='jet')
+ax2.set_title("Simulation (radial paracrystal, 20 nm spheres)")
+ax2.set_xlabel(r"$\varphi_f$ (deg)"); ax2.set_ylabel(r"$\alpha_f$ (deg)")
+fig.colorbar(im2, ax=ax2, label="Intensity (a.u.)")
+
+ax1.set_ylim(extent_angles[2],extent_angles[3])
+ax2.set_ylim(extent_angles[2],extent_angles[3])
+ax1.set_xlim(extent_angles[0],extent_angles[1])
+ax2.set_xlim(extent_angles[0],extent_angles[1])
 plt.show()

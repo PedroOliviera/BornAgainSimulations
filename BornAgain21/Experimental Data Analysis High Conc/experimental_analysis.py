@@ -6,10 +6,10 @@ from scipy.signal import savgol_filter
 
 exp_data_directory = r'C:\BornAgainSimulations\data\exp-npz'
     
-exp_filenames = ['SiN_10deg.npz','Mica_15deg.npz','Quartz_10deg.npz','Sapphire_10deg.npz', 'Si_10deg.npz']
+exp_filenames = ['35_15deg.npz','33_15deg.npz','35_10deg.npz']
 exp_2d_array = []
 exp_axes_array = []
-labels = ['SiN','Mica', 'Quartz', ' Sapphire',  'Si']
+labels = ['35', '33', '35_10deg']
 '''
 for fname in exp_filenames:
     exp_2d, exp_axes = g.load_npz_data(fname, exp_data_directory)
@@ -120,8 +120,8 @@ def hor_slice_comparison(hor_slice_q_array, data_npArrays, data_axes_array, data
     plt.grid(which="both", ls="--", lw=0.5, alpha=0.6)
     plt.tight_layout()
 
-linecuts1 = [0.4, 0.45, 0.4, 0.4,  0.4] #at 20 deg 0.44, 0.3, 0.31, 0.275, 0.31 at 10 deg - 0.282, 0.4, 0.4, 0.35, 0.45
-linecuts2 = [0.093, 0.091, 0.089, 0.095, 0.0829]
+linecuts1 = [0.256, 0.256, 0.4, 0.4,  0.4] #at 20 deg 0.44, 0.3, 0.31, 0.275, 0.31 at 10 deg - 0.282, 0.4, 0.4, 0.35, 0.45
+linecuts2 = [0.107, 0.125, 0.089, 0.095, 0.0829]
 
 for linecut1, linecut2, label, fname in zip(linecuts1, linecuts2, labels, exp_filenames):
     exp_2d, exp_axes = g.load_npz_data(fname, exp_data_directory)
