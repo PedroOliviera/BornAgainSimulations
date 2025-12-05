@@ -1,0 +1,737 @@
+from GISAXS_Analysis import GISAXS_setup_v23 as g
+from GISAXS_Analysis import Graphing_Analysis as graphing
+import bornagain as ba
+from bornagain import deg, nm, R3
+from bornagain.numpyutil import Arrayf64Converter as dac
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+from GISAXS_Analysis import height_radius_from_lineprofiles as h_r
+import matplotlib as mpl
+# ---------- Important functions ----------
+
+
+def reflect_and_stitch_horizontal(a, b, reflect='first'):
+    """
+    Reflect one of the arrays about a vertical axis (left-right flip)
+    and stitch them side by side (horizontally).
+
+    Parameters
+    ----------
+    a, b : np.ndarray
+        Input 2D arrays.
+    reflect : {'first', 'second'}, default='second'
+        Which array to reflect before stitching.
+        'first'  → flip a left-right
+        'second' → flip b left-right
+
+    Returns
+    -------
+    combined : np.ndarray
+        Combined 2D array: [reflected | other]
+    """
+    if a.ndim != 2 or b.ndim != 2:
+        raise ValueError("Both inputs must be 2D arrays.")
+
+    if a.shape[0] != b.shape[0]:
+        raise ValueError("Arrays must have the same height (number of rows).")
+
+    if reflect == 'first':
+        a_ref = np.fliplr(a)
+        combined = np.hstack((a_ref, b))
+    elif reflect == 'second':
+        b_ref = np.fliplr(b)
+        combined = np.hstack((a, b_ref))
+    else:
+        raise ValueError("reflect must be 'first' or 'second'.")
+
+    return combined
+
+def slices_for_window(shape, data_extent, window_extent, origin='upper'):
+    ny, nx = map(int, shape)
+    x0, x1, y0, y1 = map(float, data_extent)
+    X0, X1, Y0, Y1 = map(float, window_extent)
+
+    x_edges = np.linspace(min(x0, x1), max(x0, x1), nx + 1)
+    y_edges = np.linspace(min(y0, y1), max(y0, y1), ny + 1)
+
+    ix0 = max(0, np.searchsorted(x_edges, min(X0, X1), side='right') - 1)
+    ix1 = min(nx, np.searchsorted(x_edges, max(X0, X1), side='left'))
+
+    iy0 = max(0, np.searchsorted(y_edges, min(Y0, Y1), side='right') - 1)
+    iy1 = min(ny, np.searchsorted(y_edges, max(Y0, Y1), side='left'))
+
+    if origin == 'upper':
+        # Flip vertical order for images where y decreases downward
+        iy0, iy1 = ny - iy1, ny - iy0
+
+    return slice(iy0, iy1), slice(ix0, ix1)
+
+
+def resize_nearest(img, out_shape):
+    """Nearest-neighbor resize (pure NumPy), preserves aspect with integer mapping of centers."""
+    in_h, in_w = img.shape
+    out_h, out_w = out_shape
+    iy = np.round((np.arange(out_h) + 0.5) * in_h / out_h - 0.5).astype(int)
+    ix = np.round((np.arange(out_w) + 0.5) * in_w / out_w - 0.5).astype(int)
+    iy = np.clip(iy, 0, in_h - 1)
+    ix = np.clip(ix, 0, in_w - 1)
+    return img[iy][:, ix]
+
+def plot_horizontal_slice_simple(
+    alpha_cut_deg,
+    exp_arr, exp_extent,          # [phi_left, phi_right, alpha_bottom, alpha_top]
+    sim_arr, sim_extent,          # [phi_left, phi_right, alpha_bottom, alpha_top]
+    exp_origin="upper",           # how you PLOTTED exp_arr: "upper" (default) or "lower"
+    sim_origin="lower",           # how you PLOTTED sim_arr: "lower" (typical)
+):
+    """
+    Horizontal slice (constant α) -> plot intensity vs φ on a shared axis.
+    Arrays are shaped (n_alpha, n_phi). Handles origin mismatch.
+    """
+    # Unpack extents
+    phi_eL, phi_eR, a_eB, a_eT = map(float, exp_extent)
+    phi_sL, phi_sR, a_sB, a_sT = map(float, sim_extent)
+
+    n_alpha_e, n_phi_e = exp_arr.shape
+    n_alpha_s, n_phi_s = sim_arr.shape
+
+    # 1D φ axes (left->right always increases)
+    phi_e = np.linspace(phi_eL, phi_eR, n_phi_e)
+    phi_s = np.linspace(phi_sL, phi_sR, n_phi_s)
+
+    # 1D α axes depend on how the image was PLOTTED (origin)
+    if exp_origin.lower() == "lower":
+        alpha_e = np.linspace(a_eB, a_eT, n_alpha_e)   # row 0 -> α_bottom
+    else:
+        alpha_e = np.linspace(a_eT, a_eB, n_alpha_e)   # row 0 -> α_top
+
+    if sim_origin.lower() == "lower":
+        alpha_s = np.linspace(a_sB, a_sT, n_alpha_s)
+    else:
+        alpha_s = np.linspace(a_sT, a_sB, n_alpha_s)
+
+    # Nearest α row on each grid
+    row_e = int(np.argmin(np.abs(alpha_e - alpha_cut_deg)))
+    row_s = int(np.argmin(np.abs(alpha_s - alpha_cut_deg)))
+
+    # Extract slices (vs φ on their native grids)
+    y_exp = exp_arr[row_e, :]
+    y_sim = sim_arr[row_s, :]
+
+    # Interpolate EXP slice onto SIM φ grid so curves share x-axis
+    y_exp_on_sim = np.interp(phi_s, phi_e, y_exp, left=np.nan, right=np.nan)
+
+    # suppose x and y are 1D numpy arrays of the same length
+    data = np.column_stack((phi_s, y_exp_on_sim))  # shape (N, 2)
+
+    np.savetxt(
+        "xy_data_111.txt",
+        data,
+        header="x y",    # optional: column names as a comment line
+        fmt="%.6e"       # optional: format (here: scientific with 6 decimals)
+    )
+
+    # Plot
+    plt.figure(figsize=(6,4))
+    plt.semilogy(phi_s, y_exp_on_sim, label=fr"Exp @ $\alpha_f$={alpha_cut_deg:.2f}°")
+    plt.semilogy(phi_s, y_sim,        label=fr"Sim @ $\alpha_f$={alpha_cut_deg:.2f}°")
+    plt.xlabel(r"$\varphi_f$ (deg)")
+    plt.ylabel("Intensity (a.u.)")
+    plt.title(fr"Horizontal slice at $\alpha_f$={alpha_cut_deg:.2f}°")
+    plt.legend()
+    plt.tight_layout()
+
+def truncated_radius(h,d):
+    """
+    INPUTS
+    h -> height of particle
+    d -> diameter of particle
+    OUTPUTS
+    R -> radius of entire sphere
+    """
+    x = float(d/2)
+    R = float((h**2 + x**2)/(2*h))
+    return R
+def sample_radial_paracrystal_CosineRippleGauss(omega_nm=10,#6,
+                              damping_length_nm=10000, density_nm2=0.01): #3.6e-4
+    material_PS  = ba.RefractiveMaterial("PS",     3.5e-6, 2.3e-9)
+    m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
+
+    offset = 7*nm
+    spacing = 63*nm - offset
+    num_samples = 10
+
+    # Minimal test — adjust file path as needed
+    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+
+    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
+
+    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
+    h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+    h_r.plt.show()
+
+    
+    
+    #form factor
+    surface_layout = ba.ParticleLayout(); 
+    for i in range(num_samples):
+        ff_PS = ba.CosineRippleGauss(diam_K[i], diam_K[i], height_K[i])
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        surface_layout.addParticle(particle_PS, weight_K[i])
+        print(height_K[i])
+        print(diam_K[i])
+
+
+    #interference function
+    iff = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf = ba.Profile1DGauss(omega_nm*nm)
+    iff.setProbabilityDistribution(iff_pdf)
+    iff.setKappa(0.25)
+    #Particle Layout
+    surface_layout.setInterference(iff)
+    surface_layout.setTotalParticleSurfaceDensity(density_nm2)
+    
+    #Layers
+    top = ba.Layer(ba.Vacuum())
+    top.addLayout(surface_layout)
+    polymer = ba.Layer(material_PS, 214*nm)
+    sub = ba.Layer(m_substrate)
+    
+    #Sample
+    s = ba.Sample()
+    s.addLayer(top)
+    s.addLayer(polymer)
+    s.addLayer(sub)
+    return s
+def sample_radial_paracrystal_hemiellipsoid(omega_nm=6,#6,
+                              damping_length_nm=10000, density_nm2=0.01): #3.6e-4
+    material_PS  = ba.RefractiveMaterial("PS",     3.5e-6, 2.3e-9)
+    m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
+
+    offset = 7*nm
+    spacing = 63*nm - offset
+    num_samples = 10
+
+    # Minimal test — adjust file path as needed
+    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+
+    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
+
+    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
+    h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+    h_r.plt.show()
+
+    
+    
+    #form factor
+    surface_layout = ba.ParticleLayout(); 
+    for i in range(num_samples):
+        ff_PS = ba.HemiEllipsoid(diam_K[i]/2, diam_K[i]/2, height_K[i])
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        surface_layout.addParticle(particle_PS, weight_K[i])
+        print(height_K[i])
+        print(diam_K[i])
+
+
+    #interference function
+    iff = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf = ba.Profile1DGauss(omega_nm*nm)
+    iff.setProbabilityDistribution(iff_pdf)
+    iff.setKappa(0.25)
+    #Particle Layout
+    surface_layout.setInterference(iff)
+    surface_layout.setTotalParticleSurfaceDensity(density_nm2)
+    
+    #Layers
+    top = ba.Layer(ba.Vacuum())
+    top.addLayout(surface_layout)
+    polymer = ba.Layer(material_PS, 214*nm)
+    sub = ba.Layer(m_substrate)
+    
+    #Sample
+    s = ba.Sample()
+    s.addLayer(top)
+    s.addLayer(polymer)
+    s.addLayer(sub)
+    return s
+def sample_radial_paracrystal_truncated(omega_nm=10,#6,
+                              damping_length_nm=450, density_nm2=3.6e-4): #3.6e-4
+    material_PS  = ba.RefractiveMaterial("PS",     2.537E-06, 2.182E-09) 
+    material_P2VP  = ba.RefractiveMaterial("P2VP", 2.537E-06 + 2e-6, 2.58315258E-09 ) # 2.49112645E-06, 2.58315258E-09 
+    material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.07E-06, 7.84182177E-08) #7.644e-06
+    material_SiO2 = ba.RefractiveMaterial("SiO2", 4.76E-06, 4.16025294E-08)
+    material_FA  = ba.RefractiveMaterial("FA",     6E-06, 2.353858E-09) 
+
+    offset_diameter =  - 20*nm
+    offset_height = 1*nm
+    spacing = 63*nm + offset_diameter
+    num_samples = 10
+
+    # Minimal test — adjust file path as needed
+    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+
+    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
+
+    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
+    #h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+    #h_r.plt.show()    
+    
+    #form factor
+    surface_layout = ba.ParticleLayout(); 
+    for i in range(num_samples):
+        height = height_K[i] + offset_height
+        R = truncated_radius(height, diam_K[i] + offset_diameter)
+        b = 2*R - height
+        ff_PS = ba.SphericalSegment(R* nm, 0.0*nm, b* nm)
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        surface_layout.addParticle(particle_PS, weight_K[i])
+
+    total_thickness = 214*nm
+    num_layers = 4
+    layer_thickness = total_thickness/num_layers
+    
+
+    P2VP_radius_xy = 37.023/2  #*nm
+    P2VP_radius_z = P2VP_radius_xy * 0.504987
+    std_dev = 1 #4.69734
+
+    FA_radius = 3.5*nm
+
+    interior_layout = ba.ParticleLayout()
+    distr_radius = ba.DistributionGaussian(P2VP_radius_xy * nm, std_dev * nm)
+
+    for xy_radius in distr_radius.distributionSamples():
+        ff_P2VP = ba.Spheroid(xy_radius.value, (P2VP_radius_z/P2VP_radius_xy) * xy_radius.value) 
+        print('height:')
+        print((P2VP_radius_z/P2VP_radius_xy) * xy_radius.value * 2)
+        print('radius:')
+        print(xy_radius.value)
+        particle_P2VP = ba.Particle(material_P2VP, ff_P2VP)
+        vertical_shift = layer_thickness/2 - P2VP_radius_z
+        particle_P2VP_position = R3(0*nm, 0*nm, vertical_shift)
+        particle_P2VP.translate(particle_P2VP_position)
+        interior_layout.addParticle(particle_P2VP, xy_radius.weight)
+
+    interior_layout.setTotalParticleSurfaceDensity(density_nm2)
+
+
+    #interference function surface layer
+    iff = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf = ba.Profile1DGauss(omega_nm*nm)
+    iff.setProbabilityDistribution(iff_pdf)
+    iff.setKappa(0.35)
+    #Particle Layout
+    surface_layout.setInterference(iff)
+    surface_layout.setTotalParticleSurfaceDensity(density_nm2)
+
+    #interference function interiour layer
+    spacing = 1.09781 * P2VP_radius_xy * 2
+    damping_length_nm = 10000
+    omega_nm = 10
+    iff_int = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf_int = ba.Profile1DGauss(omega_nm*nm)
+    iff_int.setProbabilityDistribution(iff_pdf_int)
+    iff_int.setKappa(0.35)
+    #Particle Layout
+    interior_layout.setInterference(iff_int)
+    interior_layout.setTotalParticleSurfaceDensity(density_nm2)
+
+    #Roughness
+    hurst = 0.49
+    corr = 84*nm
+    sig = 1*nm # 3,2
+    autocorr = ba.SelfAffineFractalModel(sig, hurst, corr)
+    transient = ba.ErfTransient()
+    roughness = ba.Roughness(autocorr, transient)
+
+
+    #Layers
+    top = ba.Layer(ba.Vacuum())
+    #top.addLayout(surface_layout)
+    polymer1 = ba.Layer(material_PS, layer_thickness,roughness)
+    polymer2 = ba.Layer(material_PS, layer_thickness)
+    polymer2.addLayout(interior_layout)
+    polymer3 = ba.Layer(material_PS, layer_thickness)
+    polymer3.addLayout(interior_layout)
+    polymer4 = ba.Layer(material_PS, layer_thickness)
+    polymer4.addLayout(interior_layout)
+    SiO2 = ba.Layer(material_SiO2, 2*nm)
+    SiO2.addLayout(interior_layout)
+    Si = ba.Layer(material_Si_Sub)
+
+    #Sample
+    s = ba.Sample()
+    s.addLayer(top)
+    s.addLayer(polymer1)
+    s.addLayer(polymer2)
+    s.addLayer(polymer3)
+    s.addLayer(polymer4)
+    s.addLayer(SiO2)
+    s.addLayer(Si)
+    return s
+
+def sample_radial_paracrystal_truncated_coreShell(omega_nm=10,#6,
+                              damping_length_nm=450, density_nm2=3.6e-4): #3.6e-4
+    material_PS  = ba.RefractiveMaterial("PS",     2.25E-06, 6.4E-09) 
+    material_P2VP  = ba.RefractiveMaterial("P2VP", 2.49E-06, 8.5E-09 ) # 2.49112645E-06, 2.58315258E-09 
+    material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.04383115E-06, 7.84182177E-08) #7.644e-06
+    material_SiO2 = ba.RefractiveMaterial("SiO2", 4.74631315E-06, 4.16025294E-08)
+    material_FA  = ba.RefractiveMaterial("FA",     7.2E-06, 4.5E-07) 
+
+    offset_diameter =  - 20*nm
+    offset_height = 1*nm
+    spacing = 63*nm + offset_diameter
+    num_samples = 10
+
+    # Minimal test — adjust file path as needed
+    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
+
+    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
+    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
+
+    diam_K, height_K, weight_K, labels = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
+    #h_r.visualize_kmedoids(dmin_nm, hsub_nm, diam_K, height_K, labels, weight_rep=weight_K)
+    #h_r.plt.show()    
+    
+    #form factor
+    surface_layout = ba.ParticleLayout(); 
+    for i in range(num_samples):
+        height = height_K[i] + offset_height
+        R = truncated_radius(height, diam_K[i] + offset_diameter)
+        b = 2*R - height
+        ff_PS = ba.SphericalSegment(R* nm, 0.0*nm, b* nm)
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        surface_layout.addParticle(particle_PS, weight_K[i])
+
+    total_thickness = 214*nm
+    num_layers = 4
+    layer_thickness = total_thickness/num_layers
+    
+
+    P2VP_radius_xy = 37.023/2  #*nm
+    P2VP_radius_z = P2VP_radius_xy * 0.504987 
+    P2VP_std_dev = 1 #4.69734
+    FA_std_dev = 1
+
+    FA_radius_mean = 3.5
+
+    interior_layout = ba.ParticleLayout()
+    distr_radius_P2VP = ba.DistributionGaussian(P2VP_radius_xy * nm, P2VP_std_dev * nm)
+
+    distr_radius_FA = ba.DistributionGaussian(FA_radius_mean * nm, FA_std_dev * nm)
+
+    for xy_radius, FA_radius in zip(distr_radius_P2VP.distributionSamples(), distr_radius_FA.distributionSamples()):
+        ff_P2VP = ba.Spheroid(xy_radius.value, (P2VP_radius_z/P2VP_radius_xy) * xy_radius.value) 
+        particle_P2VP = ba.Particle(material_P2VP, ff_P2VP)
+        particle_FA = ba.Particle(material_FA, ba.Sphere(FA_radius.value))
+        FA_vertical_shift = P2VP_radius_z - FA_radius_mean
+        particle_FA_position = R3(0*nm, 0*nm, FA_vertical_shift*nm)
+        particle_FA.translate(particle_FA_position)
+
+        particle_CoreShell = ba.Compound()
+        particle_CoreShell.addComponent(particle_P2VP)
+        particle_CoreShell.addComponent(particle_FA)
+
+        vertical_shift = layer_thickness/2 - P2VP_radius_z
+
+        particle_CoreShell_position = R3(0*nm, 0*nm, vertical_shift)
+        particle_CoreShell.translate(particle_CoreShell_position)
+
+        particle_P2VP_empty = particle_P2VP
+        particle_P2VP_empty_position = R3(0*nm, 0*nm, vertical_shift)
+        particle_P2VP_empty.translate(particle_P2VP_empty_position)
+
+        interior_layout.addParticle(particle_CoreShell, xy_radius.weight*1)
+        #interior_layout.addParticle(particle_P2VP_empty, xy_radius.weight*0.95)
+
+    interior_layout.setTotalParticleSurfaceDensity(density_nm2)
+
+
+    #interference function surface layer
+    iff = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf = ba.Profile1DGauss(omega_nm*nm)
+    iff.setProbabilityDistribution(iff_pdf)
+    iff.setKappa(0.35)
+    #Particle Layout
+    surface_layout.setInterference(iff)
+    surface_layout.setTotalParticleSurfaceDensity(density_nm2)
+
+    #interference function interiour layer
+    spacing = 1.09781 * P2VP_radius_xy * 2
+    damping_length_nm = 10000
+    omega_nm = 3
+    iff_int = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf_int = ba.Profile1DGauss(omega_nm*nm)
+    iff_int.setProbabilityDistribution(iff_pdf)
+    iff_int.setKappa(0.35)
+    #Particle Layout
+    interior_layout.setInterference(iff_int)
+    interior_layout.setTotalParticleSurfaceDensity(density_nm2)
+
+    #Roughness
+    hurst = 0.49
+    corr = 84*nm
+    sig = 2.5*nm # 3,2
+    autocorr = ba.SelfAffineFractalModel(sig, hurst, corr)
+    transient = ba.ErfTransient()
+    roughness = ba.Roughness(autocorr, transient)
+
+
+    #Layers
+    top = ba.Layer(ba.Vacuum())
+    #top.addLayout(surface_layout)
+    polymer1 = ba.Layer(material_PS, layer_thickness,roughness)
+    polymer2 = ba.Layer(material_PS, layer_thickness)
+    polymer2.addLayout(interior_layout)
+    polymer3 = ba.Layer(material_PS, layer_thickness)
+    polymer3.addLayout(interior_layout)
+    polymer4 = ba.Layer(material_PS, layer_thickness)
+    polymer4.addLayout(interior_layout)
+    SiO2 = ba.Layer(material_SiO2, 2*nm)
+    SiO2.addLayout(interior_layout)
+    Si = ba.Layer(material_Si_Sub)
+
+    #Sample
+    s = ba.Sample()
+    s.addLayer(top)
+    s.addLayer(polymer1)
+    s.addLayer(polymer2)
+    s.addLayer(polymer3)
+    s.addLayer(polymer4)
+    s.addLayer(SiO2)
+    s.addLayer(Si)
+    return s
+
+
+def old_sample(P = ba.RefractiveMaterial("FA", 3.96553077e-06, 1.04599986e-07), interior_order=True, PS_dist= False, hexagonal_inter = False, FA_dist = True, interRough = False, CoreShell = False):
+    material_PS = ba.RefractiveMaterial("PS", 2.51436745E-06, 2.35391329E-09)
+    material_P2VP = ba.RefractiveMaterial("P2VP", 2.58115669E-06, 2.58321364E-09)
+    material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.04383115E-06, 7.84182177E-08) #7.644e-06
+    material_SiO2 = ba.RefractiveMaterial("SiO2", 4.74631315E-06, 4.16025294E-08)
+    material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
+    material_FA = P
+    FA_dist = 1.5*nm
+    radius_FA = 14*nm
+    height = 5*nm
+    spacing = 40*nm   
+    radius_PS = spacing/2
+    omega_order = 9*nm
+    height_to_length_ratio = height / (radius_PS*2)
+    particle_distribution = 2*nm
+
+    if(PS_dist):
+        #------------------Gaussian Distribution of Particle Size-----------------------------
+        layout = ba.ParticleLayout()
+        distr = ba.DistributionGaussian(radius_PS*2, particle_distribution)
+        for parsample in distr.distributionSamples():
+            ff_PS = ba.CosineRippleGauss(parsample.value, parsample.value, height_to_length_ratio* parsample.value)
+            particle_PS= ba.Particle(material_PS, ff_PS)
+            layout.addParticle(particle_PS, parsample.weight)
+    else:
+        layout = ba.ParticleLayout()
+        ff_PS = ba.CosineRippleGauss(radius_PS*2, radius_PS*2, height_to_length_ratio* radius_PS*2)
+        #ff_PS = ba.HemiEllipsoid(radius_PS, radius_PS, height) 
+        particle_PS= ba.Particle(material_PS, ff_PS)
+        layout.addParticle(particle_PS, 1)
+    
+    if(hexagonal_inter):
+        #-----------------Hexagonal Paracrystal for top surface layer ----------------------------
+        lattice = ba.HexagonalLattice2D(spacing, 0)
+        iff = ba.Interference2DParacrystal(lattice, 0, 1000*nm, 1000*nm) 
+        iff.setIntegrationOverXi(True) 
+        iff_pdf = ba.Profile2DGauss(omega_order, omega_order, 0) 
+        iff.setProbabilityDistributions(iff_pdf, iff_pdf)
+        layout.setInterference(iff)
+    else:
+        iff = ba.InterferenceRadialParacrystal(spacing, 400*nm) 
+        iff_pdf = ba.Profile1DGauss(omega_order) 
+        iff.setProbabilityDistribution(iff_pdf)
+        layout.setInterference(iff)
+        layout.setTotalParticleSurfaceDensity(0.000265)
+
+    #------------------Uniform Particle Size-----------------------------
+    if(FA_dist):
+        layout_interior = ba.ParticleLayout()
+        FA_distr = ba.DistributionGaussian(radius_FA, FA_dist)
+        for par_radius in FA_distr.distributionSamples():
+            ff_FA = ba.Sphere(par_radius.value)
+            particle_FA = ba.Particle(material_FA, ff_FA)
+            layout_interior.addParticle(particle_FA, par_radius.weight)
+    else:
+        print('here instead')
+        layout_interior = ba.ParticleLayout()
+        ff_FA = P
+        particle_FA = ba.Particle(P, ff_FA)
+        layout_interior.addParticle(particle_FA, 1)
+
+    if (interior_order):
+        layout_interior.setInterference(iff)
+        #layout_interior.setTotalParticleSurfaceDensity(0.000265* 0.7)
+        layout_interior.setTotalParticleSurfaceDensity(0.00008* 0.7)
+
+    #-----------------Roughness----------------------------------------------------
+    transient = ba.ErfTransient()
+    #-----------------Top Surface---------------------------------------------------
+    hurst = 0.6
+    corr = 200*nm
+    sig = 4.75*nm
+    auto_corr_surface = ba.SelfAffineFractalModel(sig, hurst, corr)
+    roughness_surface = ba.Roughness(auto_corr_surface, transient)
+
+    #-----------------Interfacial---------------------------------------------------
+    hurst = 0.6
+    corr = 50*nm
+    sig = 2*nm
+    auto_corr_inter = ba.SelfAffineFractalModel(sig, hurst, corr)
+    roughness_inter = ba.Roughness(auto_corr_inter, transient)
+
+
+    # Define layers
+    if(interRough):
+        layer_1 = ba.Layer(material_Vacuum)
+        layer_2 = ba.Layer(material_PS, 70*nm, roughness_surface)
+        layer_2.addLayout(layout)
+        layer_3 = ba.Layer(material_PS, 70*nm, roughness_inter)
+        layer_3.addLayout(layout_interior)
+        layer_4 = ba.Layer(material_PS, 70*nm, roughness_inter)
+        layer_4.addLayout(layout_interior)
+        layer_5 = ba.Layer(material_PS, 5*nm, roughness_inter)
+        layer_5.addLayout(layout_interior)
+        layer_6 = ba.Layer(material_SiO2, 2*nm)
+        layer_7 = ba.Layer(material_Si_Sub)
+    else:
+        layer_1 = ba.Layer(material_Vacuum)
+        layer_2 = ba.Layer(material_PS, 70*nm, roughness_surface)
+        layer_2.addLayout(layout)
+        layer_3 = ba.Layer(material_PS, 70*nm)
+        layer_3.addLayout(layout_interior)
+        layer_4 = ba.Layer(material_PS, 70*nm)
+        layer_4.addLayout(layout_interior)
+        layer_5 = ba.Layer(material_PS, 5*nm)
+        layer_5.addLayout(layout_interior)
+        layer_6 = ba.Layer(material_SiO2, 2*nm)
+        layer_7 = ba.Layer(material_Si_Sub)
+
+    sample = ba.Sample()
+    sample.addLayer(layer_1)
+    sample.addLayer(layer_2)
+    sample.addLayer(layer_3)
+    sample.addLayer(layer_4)
+    sample.addLayer(layer_5)
+    sample.addLayer(layer_6)
+    sample.addLayer(layer_7)
+
+    return sample
+
+# ---------- USER INPUTS ----------
+exp_dir      = r"C:\BornAgainSimulations\data\exp-npz\dec"
+exp_npz_file = "FAPbBr_4824_40gPL_16Precursors_10000RPM_15deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
+alpha_i_deg  = 0.15
+beamtime     = "dec"
+ROI_deg      = (0, 0, 2, 1.75)           # (phi_min, alpha_min, phi_max, alpha_max)
+
+# ---------- SAMPLE (BA23-compliant) ----------
+sample = old_sample()
+
+# ---------- SIMULATE ----------
+#sim = g.get_simulation_2D(sample_model=sample, detectorDistBeamtime=beamtime, angle=alpha_i_deg, beamIntensity=20e11, ROI_deg=ROI_deg, divergence=False, resolution=False, oneThread=False)
+alpha_horizontal_lincut = 0.18
+sim = g.get_simulation_line(sample, 'feb', angle=alpha_i_deg, center_horizontal_slice_values=[alpha_horizontal_lincut], center_vertical_slice_values=[0.188], beamIntensity=20e12, number_slices=10, ROI_deg=ROI_deg)
+
+print('starting simulation')
+sim.options().setUseAvgMaterials(True)
+df = sim.simulate()
+print('finished simulation')
+# BA23-official way to get NumPy arrays from Datafield:
+I_flat = dac.asNpArray(df.dataArray())     # 1D intensities, length N = n_alpha * n_phi
+phi    = dac.npArray(df.xCenters())        # x-axis centers (φ), length n_phi
+
+n_phi = int(phi.size)
+N     = int(I_flat.size)
+if n_phi == 0 or N == 0 or (N % n_phi != 0):
+    raise RuntimeError(f"Cannot infer 2D shape from BA23 Datafield: N={N}, n_phi={n_phi}")
+
+n_alpha = N // n_phi
+I_sim   = I_flat.reshape(n_alpha, n_phi)   # rows: α, cols: φ
+
+phi_min, a_min, phi_max, a_max = ROI_deg
+extent_angles = [phi_min, phi_max, a_min, a_max]
+
+# ---------- LOAD EXPERIMENT (Q axes) ----------
+exp_arr, _ = g.load_npz_data(exp_npz_file, exp_dir)
+exp_axes = g.extent_phi_alpha_from_image(exp_arr, 'dec', alpha_i_deg=alpha_i_deg)
+
+zmax = 3.7e4
+zmin = 25
+
+if zmin == 0.0 and zmax == 0.0:
+    norm = mpl.colors.Normalize(0, 1)
+else:
+    norm = mpl.colors.LogNorm(zmin, zmax)
+
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8,5), constrained_layout=True)
+
+im1 = ax1.imshow(exp_arr, extent=exp_axes,
+                 aspect="auto", norm=norm, cmap='jet')
+ax1.set_title("Experiment (resampled to φ/α)")
+ax1.set_xlabel(r"$\varphi_f$ (deg)"); ax1.set_ylabel(r"$\alpha_f$ (deg)")
+fig.colorbar(im1, ax=ax1, label="Intensity (a.u.)")
+
+im2 = ax2.imshow(I_sim, origin= 'lower', extent=extent_angles,
+                 aspect="auto", norm=norm, cmap='jet')
+ax2.set_title("Simulation (radial paracrystal, 20 nm spheres)")
+ax2.set_xlabel(r"$\varphi_f$ (deg)"); ax2.set_ylabel(r"$\alpha_f$ (deg)")
+fig.colorbar(im2, ax=ax2, label="Intensity (a.u.)")
+
+ax1.set_ylim(extent_angles[2],extent_angles[3])
+ax2.set_ylim(extent_angles[2],extent_angles[3])
+ax1.set_xlim(extent_angles[0],extent_angles[1])
+ax2.set_xlim(extent_angles[0],extent_angles[1])
+
+
+plot_horizontal_slice_simple(alpha_cut_deg=alpha_horizontal_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim,sim_extent=extent_angles)
+
+# 1) Crop EXP to the sim window (extent_angles)
+ys_e, xs_e = slices_for_window(exp_arr.shape, exp_axes, extent_angles)
+exp_crop = exp_arr[ys_e, xs_e]
+exp_crop = np.flipud(exp_crop)  # flip vertically
+
+# 2) Resample EXP crop to match sim shape exactly
+exp_arr_subtract = resize_nearest(exp_crop, I_sim.shape)
+fig, (ax1) = plt.subplots(1, 1, figsize=(8, 8), constrained_layout=True)
+
+merged_2d = reflect_and_stitch_horizontal(I_sim, exp_arr_subtract)
+
+x0, x1, y0, y1 = extent_angles
+new_extent = (-x1, x1, y0, y1)
+
+im1 = ax1.imshow(merged_2d, origin='lower', extent=new_extent,
+                 aspect='auto', norm=norm, cmap='jet')
+ax1.set_xlabel(r"$\varphi_f$ (°)")
+ax1.set_ylabel(r"$\alpha_f$ (°)")
+
+cbar = fig.colorbar(im1, ax=ax1, label="Intensity (a.u.)")
+cbar.set_label("Intensity (a.u.)", fontsize=20)
+cbar.ax.tick_params(labelsize=20)
+
+ax1.xaxis.label.set_fontsize(22)
+ax1.yaxis.label.set_fontsize(22)
+ax1.tick_params(axis='both', labelsize=20)
+
+for spine in ax1.spines.values():
+    spine.set_linewidth(2.5)   # thicker axes lines
+
+ax1.tick_params(width=2, length=8)  # width = line thickness, length = tick size
+ax1.set_yticks(np.arange(0, 1.80, 0.25))
+ax1.set_xticks(np.arange(-0.5, 0.55, 0.25))
+
+#plt.savefig(r"C:\BornAgainSimulations\data\sim-npz\GISAXS_S32_interior_0p15deg.png", dpi=500)
+#plt.savefig(r"C:\BornAgainSimulations\data\sim-npz\GISAXS_S32_interior_0p15deg.pdf", dpi=500)
+
+# No tight_layout() when using constrained layout
+plt.show()

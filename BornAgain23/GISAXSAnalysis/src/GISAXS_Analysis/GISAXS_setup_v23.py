@@ -240,7 +240,7 @@ def get_sampleTest():
     layer_3 = ba.Layer(material_SiO2, 2*nm); layer_3.addLayout(layout)
     layer_4 = ba.Layer(material_Si_Sub)
 
-    sample = ba.MultiLayer()
+    sample = ba.Sample()
     sample.addLayer(layer_1)
     sample.addLayer(layer_3)
     sample.addLayer(layer_4)
@@ -270,12 +270,18 @@ def get_simulation_2D(sample_model,
     alpha_i_deg = float(angle)
 
     beam = ba.Beam(beamIntensity, wavelength, alpha_i_deg*deg)
+    
     detector = create_detector(distance, resolution)
+    #detector.setResolutionFunction(ba.ResolutionFunction2DGaussian(0.000075, 0.000075))
 
+    sigma_phi = 0.0000085 * deg   # Tighter horizontal beam (slitted)
+    sigma_alpha = 0.004 * deg # Tighter vertical beam (slitted)
+
+    detector.setResolutionFunction(ba.ResolutionFunction2DGaussian(sigma_phi, sigma_alpha))
     sim = ba.ScatteringSimulation(beam, sample_model, detector)
     sim.options().setIncludeSpecular(False)
     sim.setBackground(ba.ConstantBackground(23))
-
+    sim.options().setUseAvgMaterials(True)
     if divergence:
         sim.addParameterDistribution(ba.ParameterDistribution.BeamInclinationAngle,
                                      ba.DistributionGaussian(alpha_i_deg*deg, 0.016*deg, 7, 2))
@@ -520,7 +526,7 @@ def lineScan(data, slice_bot, slice_top, axesLimits, pixel_inc=1, along='alpha')
 # ------------------------- Simulation conveniences ---------------------------
 def get_simulation_line(sample_model,
                         detectorDistBeamtime,
-                        angle_of_incidence,            # α_i in deg
+                        angle,            # α_i in deg
                         center_horizontal_slice_values=None,  # list of α centers (deg)
                         center_vertical_slice_values=None,    # list of φ centers (deg)
                         number_slices=1,
@@ -530,7 +536,8 @@ def get_simulation_line(sample_model,
                         divergence=False,
                         oneThread=False,
                         bounds_phi=None,    # optional (phi_low, phi_high) deg
-                        bounds_alpha=None   # optional (alpha_low, alpha_high) deg
+                        bounds_alpha=None,   # optional (alpha_low, alpha_high) deg
+                        background = 23
                         ):
     """
     Build a simulation with thin angle bands:
@@ -539,28 +546,35 @@ def get_simulation_line(sample_model,
     Bounds restrict the band lengths (use ROI otherwise).
     """
     distance = _select_distance(detectorDistBeamtime)
-    sample = sample_model
-    alpha_i_deg = float(angle_of_incidence)
+    alpha_i_deg = float(angle)
 
     beam = ba.Beam(beamIntensity, wavelength, alpha_i_deg*deg)
+    
     detector = create_detector(distance, resolution)
-    sim = ba.ScatteringSimulation(beam, sample, detector)
-    sim.setBackground(ba.ConstantBackground(23))
-
+    
+    sim = ba.ScatteringSimulation(beam, sample_model, detector)
+    sim.options().setIncludeSpecular(False)
+    sim.setBackground(ba.ConstantBackground(background))
+    sim.options().setUseAvgMaterials(True)
     if divergence:
         sim.addParameterDistribution(ba.ParameterDistribution.BeamInclinationAngle,
-                                     ba.DistributionGaussian(alpha_i_deg*deg, 0.016*deg, 19, 3))
+                                     ba.DistributionGaussian(alpha_i_deg*deg, 0.016*deg, 7, 2))
         sim.addParameterDistribution(ba.ParameterDistribution.BeamAzimuthalAngle,
-                                     ba.DistributionGaussian(0*deg, 0.042*deg, 19, 3))
+                                     ba.DistributionGaussian(0*deg, 0.042*deg, 7, 2))
 
-    # ROI
+
+    # ROI: if None, use full detector angles; otherwise pass given angles
     if ROI_deg is None:
         phi_min, phi_max, alp_min, alp_max = _rect_to_angle_extents(distance)
-        ROI_deg = [phi_min, alp_min, phi_max, alp_max]
-    phi1, a1, phi2, a2 = ROI_deg
-    phi_lo, phi_hi = min(phi1, phi2), max(phi1, phi2)
-    alp_lo, alp_hi = min(a1, a2), max(a1, a2)
-    sim.detector().setRegionOfInterest(phi_lo*deg, alp_lo*deg, phi_hi*deg, alp_hi*deg)
+        sim.detector().setRegionOfInterest(phi_min*deg, alp_min*deg, phi_max*deg, alp_max*deg)
+    else:
+        phi1, a1, phi2, a2 = ROI_deg
+        # ensure ordering
+        phi_lo, phi_hi = min(phi1, phi2), max(phi1, phi2)
+        alp_lo,   alp_hi   = min(a1, a2), max(a1, a2)
+        sim.detector().setRegionOfInterest(phi_lo*deg, alp_lo*deg, phi_hi*deg, alp_hi*deg)
+
+
 
     # Thin band widths in angle units based on pixel sizes
     dphi_deg, dalp_deg = _angular_pixel_sizes(distance)
@@ -587,10 +601,9 @@ def get_simulation_line(sample_model,
             a1b = bounds_alpha[0] * deg
             a2b = bounds_alpha[1] * deg
             sim.detector().addMask(ba.Rectangle(p1b, a1b, p2b, a2b), False)
-
     if oneThread:
         sim.options().setNumberOfThreads(1)
-
+    
     return sim
 
 # -------------------- Graphing experimental data in ANGLES -------------------

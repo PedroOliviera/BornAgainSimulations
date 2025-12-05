@@ -623,8 +623,8 @@ def hor_slice_comparison(hor_slice_q_array, data_npArrays, data_axes_array, data
     plt.figure(figsize=(7,5))
 
     n_datasets = len(data_npArrays)
-    #cmap = cm.get_cmap("rainbow", n_datasets)  # evenly spaced colors from jet colormap
-    cmap = ['red', 'green', 'purple', 'blue', 'orange']
+    cmap = cm.get_cmap("rainbow", n_datasets)  # evenly spaced colors from jet colormap
+    #cmap = ['red', 'green', 'purple', 'blue', 'orange']
     for i, (data, data_axes, hor_slice_q) in enumerate(zip(data_npArrays, data_axes_array, hor_slice_q_array)):
         
         step = 0.01
@@ -638,7 +638,7 @@ def hor_slice_comparison(hor_slice_q_array, data_npArrays, data_axes_array, data
         #y_s = savgol_filter(y2_norm, window_length=20, polyorder=3, mode="interp")
 
         # Get color from colormap
-        color = cmap[i]#cmap(i)
+        color = cmap(i)#cmap[i]
 
         # Plot with label and custom color
         plt.plot(x2_norm, y2_norm, label = labels[i], color=color)
@@ -718,9 +718,8 @@ def vert_slice_comparison(vert_slice_q_array, data_npArrays, data_axes_array, da
     #plt.xlim(left=0.055)
     plt.ylabel("Normalized Intensity", fontsize=11)
     plt.xlabel(r"$Q_{y}\;(1/{\rm nm})$", fontsize=11)
-    plt.title(rf"Horizontal Slices Along $Q_{{z}}$", fontsize=12)
+    plt.title(rf"Vertical Slices Along $Q_{{z}}$", fontsize=12)
     plt.yscale("log")
-    plt.xscale("log")
     plt.grid(which="both", ls="--", lw=0.5, alpha=0.6)
     plt.tight_layout()
 
