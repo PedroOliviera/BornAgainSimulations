@@ -484,7 +484,7 @@ sim = g.get_simulation_2D(sample_model=sample, detectorDistBeamtime=beamtime, an
 
 alpha_horizontal_lincut = 0.1452
 phi_vertical_lincut = 0.119
-sim = g.get_simulation_line(sample, 'feb', angle=alpha_i_deg, center_horizontal_slice_values=[alpha_horizontal_lincut], center_vertical_slice_values=[phi_vertical_lincut], beamIntensity=20e11, number_slices=3, ROI_deg=ROI_deg)
+#sim = g.get_simulation_line(sample, 'feb', angle=alpha_i_deg, center_horizontal_slice_values=[alpha_horizontal_lincut], center_vertical_slice_values=[phi_vertical_lincut], beamIntensity=20e11, number_slices=3, ROI_deg=ROI_deg)
 
 print('starting simulation')
 sim.options().setUseAvgMaterials(True)

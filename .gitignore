@@ -7,3 +7,4 @@ venv/
 *.h5
 *.tif
 *.zip
+data/

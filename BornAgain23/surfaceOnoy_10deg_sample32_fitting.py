@@ -157,48 +157,94 @@ def extract_experimental_slices(exp_arr, exp_axes, sim_extent, sim_shape):
         
     return exp_slice_h, exp_slice_v
 
+def get_lognormal_params(mean, std_dev):
+    """
+    Converts physical Mean and StdDev to BornAgain's Median and Scale Param.
+    """
+    # Variance of the log-data (sigma^2)
+    var_term = np.log(1 + (std_dev / mean)**2)
+    # Scale Param (sigma of the logs)
+    scale_param = np.sqrt(var_term)
+    # Median (geometric mean)
+    median = mean / np.exp(var_term / 2)
+    return median, scale_param
 # ---------- Sample Definitions ----------
 
-def get_kmedoids():
-    print("KMEDOIDS")
-
-    # Minimal test — adjust file path as needed
-    lineprofile_dir =  r"C:\BornAgainSimulations\data\AFM-lineprofiles\lineProfiles_35_Big_OnePerParticle.txt"
-    num_samples = 10
-    xc, yc = h_r.load_lineprofiles(lineprofile_dir)
-    hsub_nm, dmin_nm = h_r.extract_hsub_and_dmin(xc, yc, frac=0.0)
-    kmedoids = h_r.summarize_pairs_kmedoids(dmin_nm, hsub_nm, K=num_samples, scale=True)
-    return kmedoids
-
-
-def sample_radial_paracrystal_truncated(omega_nm, offset_diameter, offset_height, spacing, kappa, kmedoids):
+def sample_radial_paracrystal_truncated(omega_nm, PS_radius_xy, PS_radius_z, std_dev_radius, std_dev_height, spacing, kappa):
     material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09)
     m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
 
-    num_samples = 10
-    density_nm2 = 3.6e-4
-    diam_K, height_K, weight_K, labels = kmedoids
-    damping_length_nm = 2000
-
-    #form factor
     surface_layout = ba.ParticleLayout()
-    for i in range(num_samples):
-        height = height_K[i] + offset_height
-        diameter = diam_K[i] + offset_diameter
-        R = truncated_radius(height, diameter)
-        b = 2*R - height
-        ff_PS = ba.SphericalSegment(R* nm, 0.0*nm, b* nm)
-        particle_PS= ba.Particle(material_PS, ff_PS)
-        surface_layout.addParticle(particle_PS, weight_K[i])
+    # --- 1. Define your Statistical Parameters ---
+    mu_R_phys = PS_radius_xy * nm
+    sig_R_phys = std_dev_radius * nm
+
+    mu_H_phys = PS_radius_z * nm
+    sig_H_phys = std_dev_height * nm
+
+    rho = 0.7  # Correlation of the LOG values
+
+    # A. Convert Physical Stats to Log-Normal Parameters (Median & Scale/Sigma)
+    med_R, scale_R = get_lognormal_params(mu_R_phys, sig_R_phys)
+    med_H, scale_H = get_lognormal_params(mu_H_phys, sig_H_phys)
+
+    # B. Get the "Mean of the Logs" (mu) for the correlation math
+    # In lognormal math, ln(Median) = mu (the mean of the underlying normal)
+    mu_log_R = np.log(med_R)
+    mu_log_H = np.log(med_H)
+
+    # --- 2. Outer Loop: Iterate over Radius ---
+    distr_radius = ba.DistributionLogNormal(med_R, scale_R)
+
+    for r_sample in distr_radius.distributionSamples():
+        radius_val = r_sample.value
+        weight_r = r_sample.weight
+        
+        # --- 3. Inner Loop: Iterate over Height (Conditional) ---
+        
+        # transform current radius sample to log-space
+        log_radius_val = np.log(radius_val)
+
+        # Calculate Conditional Mean in LOG-SPACE
+        # (How far is log(R) from log(Median_R), scaled by correlation)
+        cond_mu_log_H = mu_log_H + rho * (scale_H / scale_R) * (log_radius_val - mu_log_R)
+        
+        # Calculate Conditional Sigma in LOG-SPACE (Standard deviation of the logs)
+        cond_scale_H = scale_H * np.sqrt(1 - rho**2)
+
+        # Convert the Log-Space Mean back to a Median for BornAgain
+        # Note: The 'scale' (sigma) remains the same between log-space and BornAgain param
+        cond_median_H = np.exp(cond_mu_log_H)
+        
+        # Safety check for nearly perfect correlation
+        if cond_scale_H < 1e-12:
+            cond_scale_H = 1e-12
+        
+        # Create the conditional LogNormal distribution
+        distr_height = ba.DistributionLogNormal(cond_median_H, cond_scale_H)
+
+        for h_sample in distr_height.distributionSamples():
+            height_val = h_sample.value
+            weight_h = h_sample.weight
+            
+            # Combined weight
+            total_weight = weight_r * weight_h
+
+            # --- 4. Create Particle ---
+            ff_PS = ba.Spheroid(radius_val, height_val)
+            particle_PS = ba.Particle(material_PS, ff_PS)
+            
+            surface_layout.addParticle(particle_PS, total_weight)
 
     #interference function
-    iff = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    dampening_length = 1000
+    iff = ba.InterferenceRadialParacrystal(spacing*nm, dampening_length*nm)
     iff_pdf = ba.Profile1DGauss(omega_nm*nm)
     iff.setProbabilityDistribution(iff_pdf)
     iff.setKappa(kappa)
     #Particle Layout
     surface_layout.setInterference(iff)
-    surface_layout.setTotalParticleSurfaceDensity(density_nm2)
+    surface_layout.setTotalParticleSurfaceDensity(3.6e-5)
    
     #Layers
     top = ba.Layer(ba.Vacuum())
@@ -244,21 +290,31 @@ def run_simulation(sample, beamtime, alpha_i_deg, ROI_deg, intensity=4e11, backg
 
 # ---------- FIT LOGIC (SIMPLIFIED) ----------
 
-def solve_residuals(params, exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg, kmedoids):
+def solve_residuals(params, exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg):
     """
     Objective function for lmfit.
     """
     # 1. Extract Parameters
     omega = params['omega_nm'].value
-    offset_diameter = params['offset_diameter'].value
-    offset_height = params['offset_height'].value
+    PS_radius_xy = params['PS_radius_xy'].value
+    PS_radius_z = params['PS_radius_z'].value
+    std_dev_radius = params['std_dev_radius'].value
+    std_dev_height = params['std_dev_height'].value
     spacing = params['spacing'].value
     kappa = params['kappa'].value
     intensity = params['intensity'].value
     background = params['background'].value
 
     # 2. Build & Simulate
-    sample = sample_radial_paracrystal_truncated(omega, offset_diameter, offset_height, spacing, kappa, kmedoids)
+    sample = sample_radial_paracrystal_truncated(
+        omega_nm = params['omega_nm'].value, 
+        spacing  = params['spacing'].value,
+        kappa = params['kappa'].value,
+        PS_radius_xy = params['PS_radius_xy'].value,
+        PS_radius_z = params['PS_radius_z'].value,
+        std_dev_radius = params['std_dev_radius'].value,
+        std_dev_height = params['std_dev_height'].value
+        )
     I_sim, sim_extent = run_simulation(sample, beamtime, alpha_i_deg, ROI_deg, intensity=intensity, background = background)
     
     # 3. Extract Simulation Slices
@@ -288,20 +344,23 @@ def solve_residuals(params, exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg, k
     
     # Logging
     chi2 = np.sum(residuals**2)
-    print(f"Iter: omega={omega:.2f}, offset diameter={offset_diameter:.1f}, offset height={offset_height:.2e}, offset height={offset_height:.2e}")
-    print(f"spacing={spacing:.1e}, kappa={kappa:.1e}, int={intensity:.1e}, int={background:.1e}, chi2={chi2:.2f}")
+    print(f"Iter: omega={omega:.2f}, PS_radius_xy={PS_radius_xy:.1f}, PS_radius_z={PS_radius_z:.2e}, std_dev_radius={std_dev_radius:.2e}")
+    print(f"std_dev_height={std_dev_height:.2e}, spacing={spacing:.1e}, kappa={kappa:.1e}, int={intensity:.1e}, background={background:.1e}, chi2={chi2:.2f}")
     
     return residuals
 
-def run_lmfit_optimization(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg, kmedoids):
+def run_lmfit_optimization(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg):
     params = lmfit.Parameters()
+
     params.add('omega_nm', value=4.02841517, min=1.0, max=8)
-    params.add('offset_diameter', value=-15, min=-30, max=-10)
-    params.add('offset_height', value=1, min=-3, max=3)
+    params.add('PS_radius_xy', value=37, min=20, max=45)
+    params.add('PS_radius_z', value=7, min=5, max=12)
+    params.add('std_dev_radius', value=4.3, min=1, max=8)
+    params.add('std_dev_height', value=1.5, min=0.5, max=3)
     params.add('spacing', value=48, min=40, max=60)
     params.add('kappa', value = 0.65, min = 0.0, max = 1)
     params.add('intensity', value=4e11, min=1e10, max=10e12)
-    params.add('background', value = 28, min = 20, max=30)
+    params.add('background', value = 28, min = 20, max=35)
 
     # --- STEP 1: GLOBAL SEARCH (Coarse Fit) ---
     print("--- Step 1: Global Search (Differential Evolution) ---")
@@ -310,7 +369,7 @@ def run_lmfit_optimization(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg, km
         solve_residuals, 
         params, 
         method='differential_evolution', 
-        args=(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg, kmedoids),
+        args=(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg),
         nan_policy='omit',
         # Strategy: limit population and generations to save time
         options={'maxiter': 10, 'popsize': 5, 'disp': True} # 10 / 5
@@ -326,7 +385,7 @@ def run_lmfit_optimization(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg, km
         solve_residuals, 
         global_result.params, # <--- Use params from Step 1
         method='leastsq',     # <--- Default local optimizer
-        args=(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg, kmedoids),
+        args=(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg),
         nan_policy='omit',
         max_nfev=20         # Limit local steps 100
     )
@@ -354,29 +413,27 @@ if __name__ == "__main__":
     exp_axes = g.extent_phi_alpha_from_image(exp_arr, 'feb', alpha_i_deg=alpha_i_deg)
 
     # 3. RUN FITTING (Uncomment to fit)
-    kmedoids = get_kmedoids()
-    best_params = run_lmfit_optimization(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg, kmedoids)
-    
+    best_params = run_lmfit_optimization(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg)
+
     # 4. FINAL SIMULATION Use best_params here
     sample = sample_radial_paracrystal_truncated(
         omega_nm=best_params['omega_nm'].value, 
-        offset_diameter=best_params['offset_diameter'].value, 
-       offset_height=best_params['offset_height'].value,
         spacing = best_params['spacing'].value,
         kappa = best_params['kappa'].value,
-        kmedoids=kmedoids
+        PS_radius_xy=best_params['PS_radius_xy'].value,
+        PS_radius_z=best_params['PS_radius_z'].value,
+        std_dev_radius=best_params['std_dev_radius'].value,
+        std_dev_height=best_params['std_dev_height'].value
         )
     '''
     sample = sample_radial_paracrystal_truncated(
         omega_nm=3, 
-        offset_diameter=-20, 
-        offset_height=0.82652,
         spacing = 40,
-        kappa = 0.54927224,
-        kmedoids=kmedoids
+        kappa = 0.54927224
         )
         intensity=1.3526e12
     '''
+    
     I_sim, extent_angles = run_simulation(sample, beamtime, alpha_i_deg, ROI_deg, intensity=best_params['intensity'].value, background=best_params['background'].value)
     #I_sim, extent_angles = run_simulation(sample, beamtime, alpha_i_deg, ROI_deg, intensity=4e11, background = 30)
 
