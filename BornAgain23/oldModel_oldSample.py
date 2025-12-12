@@ -66,6 +66,231 @@ def slices_for_window(shape, data_extent, window_extent, origin='upper'):
         iy0, iy1 = ny - iy1, ny - iy0
 
     return slice(iy0, iy1), slice(ix0, ix1)
+def plot_horizontal_slice_simple(
+    alpha_cut_deg,
+    exp_arr,
+    exp_extent,
+    sim_arr,
+    sim_extent,
+    exp_origin="upper",
+    sim_origin="lower",
+    save_fname=None,
+):
+    # --- build coordinate grids ---
+    phi_eL, phi_eR, a_eB, a_eT = map(float, exp_extent)
+    phi_sL, phi_sR, a_sB, a_sT = map(float, sim_extent)
+
+    n_alpha_e, n_phi_e = exp_arr.shape
+    n_alpha_s, n_phi_s = sim_arr.shape
+
+    phi_e = np.linspace(phi_eL, phi_eR, n_phi_e)
+    phi_s = np.linspace(phi_sL, phi_sR, n_phi_s)
+
+    # experimental alpha grid
+    if exp_origin.lower() == "lower":
+        alpha_e = np.linspace(a_eB, a_eT, n_alpha_e)
+    else:
+        alpha_e = np.linspace(a_eT, a_eB, n_alpha_e)
+
+    # simulation alpha grid
+    if sim_origin.lower() == "lower":
+        alpha_s = np.linspace(a_sB, a_sT, n_alpha_s)
+    else:
+        alpha_s = np.linspace(a_sT, a_sB, n_alpha_s)
+
+    # --- extract horizontal slices at alpha_cut_deg ---
+    row_e = int(np.argmin(np.abs(alpha_e - alpha_cut_deg)))
+    row_s = int(np.argmin(np.abs(alpha_s - alpha_cut_deg)))
+
+    y_exp = exp_arr[row_e, :]   # exp vs phi_e
+    y_sim = sim_arr[row_s, :]   # sim vs phi_s
+
+    # Make phi axes increasing for nicer saving/plotting
+    if phi_e[0] > phi_e[-1]:
+        phi_e_plot = np.flip(phi_e)
+        y_exp_plot = np.flip(y_exp)
+    else:
+        phi_e_plot = phi_e
+        y_exp_plot = y_exp
+
+    if phi_s[0] > phi_s[-1]:
+        phi_s_plot = np.flip(phi_s)
+        y_sim_plot = np.flip(y_sim)
+    else:
+        phi_s_plot = phi_s
+        y_sim_plot = y_sim
+
+    # --- save BOTH datasets in the same text file, on native phi axes ---
+    if save_fname:
+        fname = str(save_fname)
+        if not fname.endswith(".txt"):
+            fname += ".txt"
+
+        len_e = phi_e_plot.size
+        len_s = phi_s_plot.size
+        N = max(len_e, len_s)
+
+        # pad with NaNs so we can have one rectangular array
+        phi_e_col = np.full(N, np.nan)
+        y_exp_col = np.full(N, np.nan)
+        phi_s_col = np.full(N, np.nan)
+        y_sim_col = np.full(N, np.nan)
+
+        phi_e_col[:len_e] = phi_e_plot
+        y_exp_col[:len_e] = y_exp_plot
+        phi_s_col[:len_s] = phi_s_plot
+        y_sim_col[:len_s] = y_sim_plot
+
+        data = np.column_stack((phi_e_col, y_exp_col,
+                                phi_s_col, y_sim_col))
+
+        np.savetxt(
+            fname,
+            data,
+            fmt="%.6e",
+            header="# phi_exp(deg)  I_exp  phi_sim(deg)  I_sim  "
+                   f"(horizontal slice at alpha_f={alpha_cut_deg:.3f} deg)",
+        )
+
+    # --- plotting on their respective axes ---
+    plt.figure(figsize=(6, 4))
+
+    plt.semilogy(
+        phi_e_plot,
+        y_exp_plot,
+        label=fr"Exp @ $\alpha_f$={alpha_cut_deg:.2f}°",
+        marker="o",
+        markersize=2,
+        linestyle="",
+    )
+
+    plt.semilogy(
+        phi_s_plot,
+        y_sim_plot,
+        label=fr"Sim @ $\alpha_f$={alpha_cut_deg:.2f}°",
+    )
+
+    plt.xlabel(r"$\varphi_f$ (deg)")
+    plt.ylabel("Intensity (a.u.)")
+    plt.title(fr"Horizontal slice at $\alpha_f$={alpha_cut_deg:.2f}°")
+    plt.xlim(0, 1)  # keep your original limit; change if needed
+    plt.ylim(20, 1e5)
+    plt.legend()
+    plt.tight_layout()
+
+
+def plot_vertical_slice_simple(
+    phi_cut_deg,
+    exp_arr,
+    exp_extent,
+    sim_arr,
+    sim_extent,
+    exp_origin="upper",
+    sim_origin="lower",
+    save_fname=None,
+):
+    # --- build coordinate grids ---
+    phi_eL, phi_eR, a_eB, a_eT = map(float, exp_extent)
+    phi_sL, phi_sR, a_sB, a_sT = map(float, sim_extent)
+
+    n_alpha_e, n_phi_e = exp_arr.shape
+    n_alpha_s, n_phi_s = sim_arr.shape
+
+    phi_e = np.linspace(phi_eL, phi_eR, n_phi_e)
+    phi_s = np.linspace(phi_sL, phi_sR, n_phi_s)
+
+    # experimental alpha grid
+    if exp_origin.lower() == "lower":
+        alpha_e = np.linspace(a_eB, a_eT, n_alpha_e)
+    else:
+        alpha_e = np.linspace(a_eT, a_eB, n_alpha_e)
+
+    # simulation alpha grid
+    if sim_origin.lower() == "lower":
+        alpha_s = np.linspace(a_sB, a_sT, n_alpha_s)
+    else:
+        alpha_s = np.linspace(a_sT, a_sB, n_alpha_s)
+
+    # --- extract vertical slices at phi_cut_deg ---
+    col_e = int(np.argmin(np.abs(phi_e - phi_cut_deg)))
+    col_s = int(np.argmin(np.abs(phi_s - phi_cut_deg)))
+
+    y_exp = exp_arr[:, col_e]   # exp vs alpha_e
+    y_sim = sim_arr[:, col_s]   # sim vs alpha_s
+
+    # Make both alpha axes increasing for nicer plotting/saving
+    if alpha_e[0] > alpha_e[-1]:
+        alpha_e_plot = np.flip(alpha_e)
+        y_exp_plot   = np.flip(y_exp)
+    else:
+        alpha_e_plot = alpha_e
+        y_exp_plot   = y_exp
+
+    if alpha_s[0] > alpha_s[-1]:
+        alpha_s_plot = np.flip(alpha_s)
+        y_sim_plot   = np.flip(y_sim)
+    else:
+        alpha_s_plot = alpha_s
+        y_sim_plot   = y_sim
+
+    # --- save BOTH datasets in the same text file, on native axes ---
+    if save_fname:
+        fname = str(save_fname)
+        if not fname.endswith(".txt"):
+            fname += ".txt"
+
+        len_e = alpha_e_plot.size
+        len_s = alpha_s_plot.size
+        N = max(len_e, len_s)
+
+        # pad with NaNs so we can have one rectangular array
+        alpha_e_col = np.full(N, np.nan)
+        y_exp_col   = np.full(N, np.nan)
+        alpha_s_col = np.full(N, np.nan)
+        y_sim_col   = np.full(N, np.nan)
+
+        alpha_e_col[:len_e] = alpha_e_plot
+        y_exp_col[:len_e]   = y_exp_plot
+        alpha_s_col[:len_s] = alpha_s_plot
+        y_sim_col[:len_s]   = y_sim_plot
+
+        data = np.column_stack((alpha_e_col, y_exp_col,
+                                alpha_s_col, y_sim_col))
+
+        np.savetxt(
+            fname,
+            data,
+            fmt="%.6e",
+            header="# alpha_f_exp  I_exp  alpha_f_sim  I_sim  "
+                   f"(vertical slice at phi_f={phi_cut_deg:.3f} deg)",
+        )
+
+    # --- plotting on their respective axes ---
+    plt.figure(figsize=(6, 4))
+
+    plt.semilogy(
+        alpha_e_plot,
+        y_exp_plot,
+        label=fr"Exp @ $\varphi_f$={phi_cut_deg:.2f}°",
+        marker="o",
+        markersize=2,
+        linestyle="",
+    )
+
+    plt.semilogy(
+        alpha_s_plot,
+        y_sim_plot,
+        label=fr"Sim @ $\varphi_f$={phi_cut_deg:.2f}°",
+    )
+
+    plt.xlim(0, 1.75)
+    plt.ylim(50, 5e4)
+    plt.xlabel(r"$\alpha_f$ (deg)")
+    plt.ylabel("Intensity (a.u.)")
+    plt.title(fr"Vertical slice at $\varphi_f$={phi_cut_deg:.2f}°")
+    plt.legend()
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.tight_layout()
 
 
 def resize_nearest(img, out_shape):
@@ -77,70 +302,6 @@ def resize_nearest(img, out_shape):
     iy = np.clip(iy, 0, in_h - 1)
     ix = np.clip(ix, 0, in_w - 1)
     return img[iy][:, ix]
-
-def plot_horizontal_slice_simple(
-    alpha_cut_deg,
-    exp_arr, exp_extent,          # [phi_left, phi_right, alpha_bottom, alpha_top]
-    sim_arr, sim_extent,          # [phi_left, phi_right, alpha_bottom, alpha_top]
-    exp_origin="upper",           # how you PLOTTED exp_arr: "upper" (default) or "lower"
-    sim_origin="lower",           # how you PLOTTED sim_arr: "lower" (typical)
-):
-    """
-    Horizontal slice (constant α) -> plot intensity vs φ on a shared axis.
-    Arrays are shaped (n_alpha, n_phi). Handles origin mismatch.
-    """
-    # Unpack extents
-    phi_eL, phi_eR, a_eB, a_eT = map(float, exp_extent)
-    phi_sL, phi_sR, a_sB, a_sT = map(float, sim_extent)
-
-    n_alpha_e, n_phi_e = exp_arr.shape
-    n_alpha_s, n_phi_s = sim_arr.shape
-
-    # 1D φ axes (left->right always increases)
-    phi_e = np.linspace(phi_eL, phi_eR, n_phi_e)
-    phi_s = np.linspace(phi_sL, phi_sR, n_phi_s)
-
-    # 1D α axes depend on how the image was PLOTTED (origin)
-    if exp_origin.lower() == "lower":
-        alpha_e = np.linspace(a_eB, a_eT, n_alpha_e)   # row 0 -> α_bottom
-    else:
-        alpha_e = np.linspace(a_eT, a_eB, n_alpha_e)   # row 0 -> α_top
-
-    if sim_origin.lower() == "lower":
-        alpha_s = np.linspace(a_sB, a_sT, n_alpha_s)
-    else:
-        alpha_s = np.linspace(a_sT, a_sB, n_alpha_s)
-
-    # Nearest α row on each grid
-    row_e = int(np.argmin(np.abs(alpha_e - alpha_cut_deg)))
-    row_s = int(np.argmin(np.abs(alpha_s - alpha_cut_deg)))
-
-    # Extract slices (vs φ on their native grids)
-    y_exp = exp_arr[row_e, :]
-    y_sim = sim_arr[row_s, :]
-
-    # Interpolate EXP slice onto SIM φ grid so curves share x-axis
-    y_exp_on_sim = np.interp(phi_s, phi_e, y_exp, left=np.nan, right=np.nan)
-
-    # suppose x and y are 1D numpy arrays of the same length
-    data = np.column_stack((phi_s, y_exp_on_sim))  # shape (N, 2)
-
-    np.savetxt(
-        "xy_data_111.txt",
-        data,
-        header="x y",    # optional: column names as a comment line
-        fmt="%.6e"       # optional: format (here: scientific with 6 decimals)
-    )
-
-    # Plot
-    plt.figure(figsize=(6,4))
-    plt.semilogy(phi_s, y_exp_on_sim, label=fr"Exp @ $\alpha_f$={alpha_cut_deg:.2f}°")
-    plt.semilogy(phi_s, y_sim,        label=fr"Sim @ $\alpha_f$={alpha_cut_deg:.2f}°")
-    plt.xlabel(r"$\varphi_f$ (deg)")
-    plt.ylabel("Intensity (a.u.)")
-    plt.title(fr"Horizontal slice at $\alpha_f$={alpha_cut_deg:.2f}°")
-    plt.legend()
-    plt.tight_layout()
 
 def truncated_radius(h,d):
     """
@@ -515,9 +676,9 @@ def old_sample(P = ba.RefractiveMaterial("FA", 3.96553077e-06, 1.04599986e-07), 
     material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
     material_FA = P
     FA_dist = 1.5*nm
-    radius_FA = 14*nm
+    radius_FA = 16*nm
     height = 5*nm
-    spacing = 40*nm   
+    spacing = 44*nm   
     radius_PS = spacing/2
     omega_order = 9*nm
     height_to_length_ratio = height / (radius_PS*2)
@@ -605,7 +766,7 @@ def old_sample(P = ba.RefractiveMaterial("FA", 3.96553077e-06, 1.04599986e-07), 
         layer_7 = ba.Layer(material_Si_Sub)
     else:
         layer_1 = ba.Layer(material_Vacuum)
-        layer_2 = ba.Layer(material_PS, 70*nm, roughness_surface)
+        layer_2 = ba.Layer(material_PS, 70*nm, roughness_surface) # layer_2 = ba.Layer(material_PS, 70*nm, roughness_surface)
         layer_2.addLayout(layout)
         layer_3 = ba.Layer(material_PS, 70*nm)
         layer_3.addLayout(layout_interior)
@@ -628,20 +789,20 @@ def old_sample(P = ba.RefractiveMaterial("FA", 3.96553077e-06, 1.04599986e-07), 
     return sample
 
 # ---------- USER INPUTS ----------
-exp_dir      = r"C:\BornAgainSimulations\data\exp-npz\dec"
-exp_npz_file = "FAPbBr_4824_40gPL_16Precursors_10000RPM_15deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
-alpha_i_deg  = 0.15
-beamtime     = "dec"
-ROI_deg      = (0, 0, 2, 1.75)           # (phi_min, alpha_min, phi_max, alpha_max)
+exp_dir      = r"C:\BornAgainSimulations\data\exp-npz\dec" #dec
+exp_npz_file = 'FAPbBr_4824_40gPL_27Precursors_10000RPM_15deg.npz' #'32_15deg.npz' #"FAPbBr_4824_40gPL_16Precursors_10000RPM_15deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
+alpha_i_deg  = 0.188
+beamtime     = 'dec' #feb
+ROI_deg      = (0, 0, 0.6, 1.75)           # (phi_min, alpha_min, phi_max, alpha_max)
 
 # ---------- SAMPLE (BA23-compliant) ----------
 sample = old_sample()
 
 # ---------- SIMULATE ----------
-#sim = g.get_simulation_2D(sample_model=sample, detectorDistBeamtime=beamtime, angle=alpha_i_deg, beamIntensity=20e11, ROI_deg=ROI_deg, divergence=False, resolution=False, oneThread=False)
+sim = g.get_simulation_2D(sample_model=sample, detectorDistBeamtime=beamtime, angle=alpha_i_deg, beamIntensity=2e12, ROI_deg=ROI_deg, divergence=False, resolution=False, oneThread=False)
 alpha_horizontal_lincut = 0.18
-sim = g.get_simulation_line(sample, 'feb', angle=alpha_i_deg, center_horizontal_slice_values=[alpha_horizontal_lincut], center_vertical_slice_values=[0.188], beamIntensity=20e12, number_slices=10, ROI_deg=ROI_deg)
-
+#sim = g.get_simulation_line(sample, 'feb', angle=alpha_i_deg, center_horizontal_slice_values=[alpha_horizontal_lincut], center_vertical_slice_values=[0.188], beamIntensity=20e12, number_slices=10, ROI_deg=ROI_deg)
+phi_vertical_lincut = 0.1
 print('starting simulation')
 sim.options().setUseAvgMaterials(True)
 df = sim.simulate()
@@ -663,7 +824,10 @@ extent_angles = [phi_min, phi_max, a_min, a_max]
 
 # ---------- LOAD EXPERIMENT (Q axes) ----------
 exp_arr, _ = g.load_npz_data(exp_npz_file, exp_dir)
-exp_axes = g.extent_phi_alpha_from_image(exp_arr, 'dec', alpha_i_deg=alpha_i_deg)
+exp_axes = g.extent_phi_alpha_from_image(exp_arr, beamtime, alpha_i_deg=alpha_i_deg) #dec
+
+#plot_horizontal_slice_simple(alpha_cut_deg=alpha_horizontal_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim, sim_extent=extent_angles, save_fname='horizontal_37Pre_fitted_15deg')
+#plot_vertical_slice_simple(phi_cut_deg=phi_vertical_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim, sim_extent=extent_angles, save_fname='vertical_37Pre_fitted_15deg')
 
 zmax = 3.7e4
 zmin = 25
@@ -692,9 +856,6 @@ ax1.set_ylim(extent_angles[2],extent_angles[3])
 ax2.set_ylim(extent_angles[2],extent_angles[3])
 ax1.set_xlim(extent_angles[0],extent_angles[1])
 ax2.set_xlim(extent_angles[0],extent_angles[1])
-
-
-plot_horizontal_slice_simple(alpha_cut_deg=alpha_horizontal_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim,sim_extent=extent_angles)
 
 # 1) Crop EXP to the sim window (extent_angles)
 ys_e, xs_e = slices_for_window(exp_arr.shape, exp_axes, extent_angles)
@@ -730,8 +891,8 @@ ax1.tick_params(width=2, length=8)  # width = line thickness, length = tick size
 ax1.set_yticks(np.arange(0, 1.80, 0.25))
 ax1.set_xticks(np.arange(-0.5, 0.55, 0.25))
 
-#plt.savefig(r"C:\BornAgainSimulations\data\sim-npz\GISAXS_S32_interior_0p15deg.png", dpi=500)
-#plt.savefig(r"C:\BornAgainSimulations\data\sim-npz\GISAXS_S32_interior_0p15deg.pdf", dpi=500)
+plt.savefig(r"C:\BornAgainSimulations\data\sim-npz\GISAXS_37Pre_interior_0p15deg.png", dpi=500)
+plt.savefig(r"C:\BornAgainSimulations\data\sim-npz\GISAXS_37Pre_interior_0p15deg.pdf", dpi=500)
 
 # No tight_layout() when using constrained layout
 plt.show()

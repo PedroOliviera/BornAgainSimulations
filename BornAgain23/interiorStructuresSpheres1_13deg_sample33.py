@@ -463,7 +463,7 @@ def sample_radial_paracrystal_old(omega_nm=10,#6,
 
     #Layers
     top = ba.Layer(ba.Vacuum())
-    #top.addLayout(surface_layout)
+    top.addLayout(surface_layout)
     polymer1 = ba.Layer(material_PS, layer_thickness,roughness)
     polymer2 = ba.Layer(material_PS, layer_thickness)
     polymer2.addLayout(interior_layout)
@@ -621,18 +621,18 @@ def sample_radial_paracrystal_truncated_coreShell(omega_nm=10,#6,
 
 # ---------- USER INPUTS ----------
 exp_dir      = r"C:\BornAgainSimulations\data\exp-npz\feb"
-exp_npz_file = "33_13deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max]
-alpha_i_deg  = 0.13
+exp_npz_file = "33_13deg.npz"     # saved with Q axes: [qy_min,qy_max,qz_min,qz_max] #33_15deg
+alpha_i_deg  = 0.13 #0.13
 beamtime     = "feb"
-ROI_deg      = (0, 0, 2, 1.75)           # (phi_min, alpha_min, phi_max, alpha_max)
+ROI_deg      = (0, 0, 1.5, 1.75)           # (phi_min, alpha_min, phi_max, alpha_max)
 
 # ---------- SAMPLE (BA23-compliant) ----------
 sample = sample_radial_paracrystal_old()
 
 # ---------- SIMULATE ----------
-#sim = g.get_simulation_2D(sample_model=sample, detectorDistBeamtime=beamtime, angle=alpha_i_deg, beamIntensity=20e11, ROI_deg=ROI_deg, divergence=False, resolution=False, oneThread=False)
+sim = g.get_simulation_2D(sample_model=sample, detectorDistBeamtime=beamtime, angle=alpha_i_deg, beamIntensity=20e12, ROI_deg=ROI_deg, divergence=False, resolution=False, oneThread=False)
 
-sim = g.get_simulation_line(sample, 'feb', angle=alpha_i_deg, center_horizontal_slice_values=[0.151], center_vertical_slice_values=[0.161], beamIntensity=20e12, number_slices=10, ROI_deg=ROI_deg)
+#sim = g.get_simulation_line(sample, 'feb', angle=alpha_i_deg, center_horizontal_slice_values=[0.151], center_vertical_slice_values=[0.161], beamIntensity=20e12, number_slices=10, ROI_deg=ROI_deg)
 
 print('starting simulation')
 sim.options().setUseAvgMaterials(True)

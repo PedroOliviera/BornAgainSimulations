@@ -111,7 +111,7 @@ def plot_vertical_slice_simple(phi_cut_deg, exp_arr, exp_extent, sim_arr, sim_ex
     plt.figure(figsize=(6,4))
     plt.semilogy(alpha_e, y_exp, label=fr"Exp @ $\varphi_f$={phi_cut_deg:.2f}°", marker='o', markersize=2, linestyle='')
     plt.semilogy(alpha_s, y_sim, label=fr"Sim @ $\varphi_f$={phi_cut_deg:.2f}°")
-    plt.xlim(0, 1.75); plt.ylim(50,5e4)
+    plt.xlim(0, 1.75); plt.ylim(50,7e4)
     plt.xlabel(r"$\alpha_f$ (deg)"); plt.ylabel("Intensity (a.u.)")
     plt.title(fr"Vertical slice at $\varphi_f$={phi_cut_deg:.2f}°")
     plt.legend(); plt.grid(True, which="both", linestyle='--', linewidth=0.5)
@@ -172,9 +172,17 @@ def get_lognormal_params(mean, std_dev):
 # ---------- Sample Definitions ----------
 
 def sample_radial_paracrystal_truncated(omega_nm, PS_radius_xy, PS_radius_z, std_dev_radius, std_dev_height, spacing, kappa):
-    material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09)
-    m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
+    material_PS  = ba.RefractiveMaterial("PS",     2.537E-06, 2.182E-09) 
+    material_P2VP  = ba.RefractiveMaterial("P2VP", 2.537E-06 + 2e-6, 2.58315258E-09 ) # 2.49112645E-06, 2.58315258E-09 
+    material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.07E-06, 7.84182177E-08) #7.644e-06
+    material_SiO2 = ba.RefractiveMaterial("SiO2", 4.76E-06, 4.16025294E-08)
+    material_FA  = ba.RefractiveMaterial("FA",     6E-06, 2.353858E-09) 
 
+    total_thickness = 288*nm
+    num_layers = 4
+    layer_thickness = total_thickness/num_layers
+
+    ##################################################---------Surface FF---------##################################################################
     surface_layout = ba.ParticleLayout()
     # --- 1. Define your Statistical Parameters ---
     mu_R_phys = PS_radius_xy * nm
@@ -237,27 +245,84 @@ def sample_radial_paracrystal_truncated(omega_nm, PS_radius_xy, PS_radius_z, std
             
             surface_layout.addParticle(particle_PS, total_weight)
 
-    #interference function
+    ##############################################-----------Interior FF-----------##############################################################
+    P2VP_radius_xy = 37.023/2  #*nm
+    P2VP_radius_z = P2VP_radius_xy * 0.504987
+    std_dev = 1 #4.69734
+
+    FA_radius = 3.5*nm
+
+    interior_layout = ba.ParticleLayout()
+    distr_radius = ba.DistributionGaussian(P2VP_radius_xy * nm, std_dev * nm)
+
+    for xy_radius in distr_radius.distributionSamples():
+        ff_P2VP = ba.Spheroid(xy_radius.value, (P2VP_radius_z/P2VP_radius_xy) * xy_radius.value) 
+        print('height:')
+        print((P2VP_radius_z/P2VP_radius_xy) * xy_radius.value * 2)
+        print('radius:')
+        print(xy_radius.value)
+        particle_P2VP = ba.Particle(material_P2VP, ff_P2VP)
+        vertical_shift = layer_thickness/2 - P2VP_radius_z
+        particle_P2VP_position = R3(0*nm, 0*nm, vertical_shift)
+        particle_P2VP.translate(particle_P2VP_position)
+        interior_layout.addParticle(particle_P2VP, xy_radius.weight)
+
+    #interference function surface
     dampening_length = 1000
+    density_nm2_int = 3.6e-4
     iff = ba.InterferenceRadialParacrystal(spacing*nm, dampening_length*nm)
     iff_pdf = ba.Profile1DGauss(omega_nm*nm)
     iff.setProbabilityDistribution(iff_pdf)
     iff.setKappa(kappa)
     #Particle Layout
     surface_layout.setInterference(iff)
-    surface_layout.setTotalParticleSurfaceDensity(3.6e-5)
+    surface_layout.setTotalParticleSurfaceDensity(density_nm2_int)
+
+    #interference function interiour layer
+    spacing = 1.09781 * P2VP_radius_xy * 2
+    damping_length_nm = 10000
+    density_nm2 = 3.6e-4
+    omega_nm = 10
+    iff_int = ba.InterferenceRadialParacrystal(spacing*nm, damping_length_nm*nm)
+    iff_pdf_int = ba.Profile1DGauss(omega_nm*nm)
+    iff_int.setProbabilityDistribution(iff_pdf_int)
+    iff_int.setKappa(0.35)
+    #Particle Layout
+    interior_layout.setInterference(iff_int)
+    interior_layout.setTotalParticleSurfaceDensity(0.00008* 0.7)
    
+    #Roughness
+    hurst = 0.49
+    corr = 84*nm
+    sig = 1*nm # 3,2
+    autocorr = ba.SelfAffineFractalModel(sig, hurst, corr)
+    transient = ba.ErfTransient()
+    roughness = ba.Roughness(autocorr, transient)
+
+
     #Layers
     top = ba.Layer(ba.Vacuum())
     top.addLayout(surface_layout)
-    polymer = ba.Layer(material_PS, 288*nm)
-    sub = ba.Layer(m_substrate)
-   
+    polymer1 = ba.Layer(material_PS, layer_thickness, roughness)
+    polymer2 = ba.Layer(material_PS, layer_thickness)
+    polymer2.addLayout(interior_layout)
+    polymer3 = ba.Layer(material_PS, layer_thickness)
+    polymer3.addLayout(interior_layout)
+    polymer4 = ba.Layer(material_PS, layer_thickness)
+    polymer4.addLayout(interior_layout)
+    SiO2 = ba.Layer(material_SiO2, 2*nm)
+    SiO2.addLayout(interior_layout)
+    Si = ba.Layer(material_Si_Sub)
+
     #Sample
     s = ba.Sample()
     s.addLayer(top)
-    s.addLayer(polymer)
-    s.addLayer(sub)
+    s.addLayer(polymer1)
+    s.addLayer(polymer2)
+    s.addLayer(polymer3)
+    s.addLayer(polymer4)
+    s.addLayer(SiO2)
+    s.addLayer(Si)
     return s
 
 # ---------- Simulation Wrapper ----------
@@ -404,9 +469,9 @@ if __name__ == "__main__":
     print('start')
     # 1. SETUP
     exp_dir      = r"C:\BornAgainSimulations\data\exp-npz\feb"
-    exp_npz_file = "32_10deg.npz"
+    exp_npz_file = "33_15deg.npz"
     beamtime     = "feb"
-    alpha_i_deg  = 0.10
+    alpha_i_deg  = 0.15
     ROI_deg      = (0, 0, 1, 1)
     
     # 2. LOAD DATA
@@ -431,7 +496,7 @@ if __name__ == "__main__":
     '''
     sample = sample_radial_paracrystal_truncated(
         omega_nm = 6, 
-        spacing = 53.005,
+        spacing = 43.005,
         kappa = 0.35,
         PS_radius_xy = 22.555, #26.5
         PS_radius_z = 5,
@@ -444,7 +509,7 @@ if __name__ == "__main__":
 
     # 5. VISUALIZE
     
-    I_sim = scipy.ndimage.gaussian_filter(I_sim, sigma=[2.0, 1.5])
+    #I_sim = scipy.ndimage.gaussian_filter(I_sim, sigma=[2.0, 1.5])
     
     plot_horizontal_slice_simple(alpha_cut_deg=alpha_horizontal_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim, sim_extent=extent_angles)
     plot_vertical_slice_simple(phi_cut_deg=phi_vertical_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim, sim_extent=extent_angles)
@@ -458,7 +523,7 @@ if __name__ == "__main__":
     fig, ax1 = plt.subplots(1, 1, figsize=(8, 8), constrained_layout=True)
     merged_2d = reflect_and_stitch_horizontal(I_sim, exp_arr_subtract)
     x0, x1, y0, y1 = extent_angles
-    im1 = ax1.imshow(merged_2d, origin='lower', extent=(-x1, x1, y0, y1), aspect='auto', norm=LogNorm(25, 3.7e4), cmap='jet')
+    im1 = ax1.imshow(merged_2d, origin='lower', extent=(-x1, x1, y0, y1), aspect='auto', norm=LogNorm(25, 7e4), cmap='jet') #3.7e4
     ax1.set_xlabel(r"$\varphi_f$ (°)"); ax1.set_ylabel(r"$\alpha_f$ (°)")
     fig.colorbar(im1, ax=ax1, label="Intensity (a.u.)")
     plt.show()

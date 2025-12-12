@@ -18,9 +18,10 @@ g.tifToNpzConversion(exp_filename_Si, exp_data_directory, 'dec', 0.2)
 '''
 
 directory1 = r'C:\BornAgainSimulations\data\tif\feb'
-filename1 = '32_15deg.tif'
+filename1 = '31_15deg.tif'
 
 g.tifToNpzConversion(filename1, directory1, 'feb', 0.15)
+
 '''
 exp_data_directory = r'C:\BornAgainSimulations\data\tif\dec'
 exp_filename_Si1 = 'FAPbBr_4824_40gPL_16Precursors_10000RPM_10deg.tif'

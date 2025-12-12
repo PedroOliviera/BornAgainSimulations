@@ -10,10 +10,11 @@ from GISAXS_Analysis import height_radius_from_lineprofiles as h_r
 import matplotlib as mpl
 import lmfit
 import scipy.ndimage
-
+global ctr
+ctr = 0
 # Global Cut Positions
-alpha_horizontal_lincut = 0.105
-phi_vertical_lincut = 0.13315
+alpha_horizontal_lincut = 0.136
+phi_vertical_lincut = 0.1412
 
 # ---------- Helper Functions (Plotting & array manipulation) ----------
 
@@ -51,70 +52,230 @@ def resize_nearest(img, out_shape):
     ix = np.clip(np.round((np.arange(out_w) + 0.5) * in_w / out_w - 0.5).astype(int), 0, in_w - 1)
     return img[iy][:, ix]
 
-def plot_horizontal_slice_simple(alpha_cut_deg, exp_arr, exp_extent, sim_arr, sim_extent, exp_origin="upper", sim_origin="lower"):
+def plot_horizontal_slice_simple(
+    alpha_cut_deg,
+    exp_arr,
+    exp_extent,
+    sim_arr,
+    sim_extent,
+    exp_origin="upper",
+    sim_origin="lower",
+    save_fname=None,
+):
+    # --- build coordinate grids ---
     phi_eL, phi_eR, a_eB, a_eT = map(float, exp_extent)
     phi_sL, phi_sR, a_sB, a_sT = map(float, sim_extent)
+
     n_alpha_e, n_phi_e = exp_arr.shape
     n_alpha_s, n_phi_s = sim_arr.shape
+
     phi_e = np.linspace(phi_eL, phi_eR, n_phi_e)
     phi_s = np.linspace(phi_sL, phi_sR, n_phi_s)
+
+    # experimental alpha grid
     if exp_origin.lower() == "lower":
         alpha_e = np.linspace(a_eB, a_eT, n_alpha_e)
     else:
         alpha_e = np.linspace(a_eT, a_eB, n_alpha_e)
+
+    # simulation alpha grid
     if sim_origin.lower() == "lower":
         alpha_s = np.linspace(a_sB, a_sT, n_alpha_s)
     else:
         alpha_s = np.linspace(a_sT, a_sB, n_alpha_s)
+
+    # --- extract horizontal slices at alpha_cut_deg ---
     row_e = int(np.argmin(np.abs(alpha_e - alpha_cut_deg)))
     row_s = int(np.argmin(np.abs(alpha_s - alpha_cut_deg)))
-    y_exp_on_sim = np.interp(phi_s, phi_e, exp_arr[row_e, :], left=np.nan, right=np.nan)
-    
-    plt.figure(figsize=(6,4))
-    plt.semilogy(phi_s, y_exp_on_sim, label=fr"Exp @ $\alpha_f$={alpha_cut_deg:.2f}°")
-    plt.semilogy(phi_s, sim_arr[row_s, :], label=fr"Sim @ $\alpha_f$={alpha_cut_deg:.2f}°")
-    plt.xlabel(r"$\varphi_f$ (deg)"); plt.ylabel("Intensity (a.u.)")
-    plt.title(fr"Horizontal slice at $\alpha_f$={alpha_cut_deg:.2f}°")
-    plt.xlim(0,1)
-    plt.legend(); plt.tight_layout()
 
-def plot_vertical_slice_simple(phi_cut_deg, exp_arr, exp_extent, sim_arr, sim_extent, exp_origin="upper", sim_origin="lower"):
+    y_exp = exp_arr[row_e, :]   # exp vs phi_e
+    y_sim = sim_arr[row_s, :]   # sim vs phi_s
+
+    # Make phi axes increasing for nicer saving/plotting
+    if phi_e[0] > phi_e[-1]:
+        phi_e_plot = np.flip(phi_e)
+        y_exp_plot = np.flip(y_exp)
+    else:
+        phi_e_plot = phi_e
+        y_exp_plot = y_exp
+
+    if phi_s[0] > phi_s[-1]:
+        phi_s_plot = np.flip(phi_s)
+        y_sim_plot = np.flip(y_sim)
+    else:
+        phi_s_plot = phi_s
+        y_sim_plot = y_sim
+
+    # --- save BOTH datasets in the same text file, on native phi axes ---
+    if save_fname:
+        fname = str(save_fname)
+        if not fname.endswith(".txt"):
+            fname += ".txt"
+
+        len_e = phi_e_plot.size
+        len_s = phi_s_plot.size
+        N = max(len_e, len_s)
+
+        # pad with NaNs so we can have one rectangular array
+        phi_e_col = np.full(N, np.nan)
+        y_exp_col = np.full(N, np.nan)
+        phi_s_col = np.full(N, np.nan)
+        y_sim_col = np.full(N, np.nan)
+
+        phi_e_col[:len_e] = phi_e_plot
+        y_exp_col[:len_e] = y_exp_plot
+        phi_s_col[:len_s] = phi_s_plot
+        y_sim_col[:len_s] = y_sim_plot
+
+        data = np.column_stack((phi_e_col, y_exp_col,
+                                phi_s_col, y_sim_col))
+
+        np.savetxt(
+            fname,
+            data,
+            fmt="%.6e",
+            header="# phi_exp(deg)  I_exp  phi_sim(deg)  I_sim  "
+                   f"(horizontal slice at alpha_f={alpha_cut_deg:.3f} deg)",
+        )
+
+    # --- plotting on their respective axes ---
+    plt.figure(figsize=(6, 4))
+
+    plt.semilogy(
+        phi_e_plot,
+        y_exp_plot,
+        label=fr"Exp @ $\alpha_f$={alpha_cut_deg:.2f}°",
+        marker="o",
+        markersize=2,
+        linestyle="",
+    )
+
+    plt.semilogy(
+        phi_s_plot,
+        y_sim_plot,
+        label=fr"Sim @ $\alpha_f$={alpha_cut_deg:.2f}°",
+    )
+
+    plt.xlabel(r"$\varphi_f$ (deg)")
+    plt.ylabel("Intensity (a.u.)")
+    plt.title(fr"Horizontal slice at $\alpha_f$={alpha_cut_deg:.2f}°")
+    plt.xlim(0, 1)  # keep your original limit; change if needed
+    plt.ylim(20, 1e5)
+    plt.legend()
+    plt.tight_layout()
+
+
+def plot_vertical_slice_simple(
+    phi_cut_deg,
+    exp_arr,
+    exp_extent,
+    sim_arr,
+    sim_extent,
+    exp_origin="upper",
+    sim_origin="lower",
+    save_fname=None,
+):
+    # --- build coordinate grids ---
     phi_eL, phi_eR, a_eB, a_eT = map(float, exp_extent)
     phi_sL, phi_sR, a_sB, a_sT = map(float, sim_extent)
+
     n_alpha_e, n_phi_e = exp_arr.shape
     n_alpha_s, n_phi_s = sim_arr.shape
+
     phi_e = np.linspace(phi_eL, phi_eR, n_phi_e)
     phi_s = np.linspace(phi_sL, phi_sR, n_phi_s)
+
+    # experimental alpha grid
     if exp_origin.lower() == "lower":
         alpha_e = np.linspace(a_eB, a_eT, n_alpha_e)
     else:
         alpha_e = np.linspace(a_eT, a_eB, n_alpha_e)
+
+    # simulation alpha grid
     if sim_origin.lower() == "lower":
         alpha_s = np.linspace(a_sB, a_sT, n_alpha_s)
     else:
         alpha_s = np.linspace(a_sT, a_sB, n_alpha_s)
-    
+
+    # --- extract vertical slices at phi_cut_deg ---
     col_e = int(np.argmin(np.abs(phi_e - phi_cut_deg)))
     col_s = int(np.argmin(np.abs(phi_s - phi_cut_deg)))
-    y_exp = exp_arr[:, col_e]
-    y_sim = sim_arr[:, col_s]
-    
+
+    y_exp = exp_arr[:, col_e]   # exp vs alpha_e
+    y_sim = sim_arr[:, col_s]   # sim vs alpha_s
+
+    # Make both alpha axes increasing for nicer plotting/saving
     if alpha_e[0] > alpha_e[-1]:
-        alpha_e_sorted = np.flip(alpha_e)
-        y_exp_sorted = np.flip(y_exp)
+        alpha_e_plot = np.flip(alpha_e)
+        y_exp_plot   = np.flip(y_exp)
     else:
-        alpha_e_sorted = alpha_e
-        y_exp_sorted = y_exp
-        
-    y_exp_on_sim = np.interp(alpha_s, alpha_e_sorted, y_exp_sorted, left=np.nan, right=np.nan)
-    
-    plt.figure(figsize=(6,4))
-    plt.semilogy(alpha_e, y_exp, label=fr"Exp @ $\varphi_f$={phi_cut_deg:.2f}°", marker='o', markersize=2, linestyle='')
-    plt.semilogy(alpha_s, y_sim, label=fr"Sim @ $\varphi_f$={phi_cut_deg:.2f}°")
-    plt.xlim(0, 1.75); plt.ylim(50,5e4)
-    plt.xlabel(r"$\alpha_f$ (deg)"); plt.ylabel("Intensity (a.u.)")
+        alpha_e_plot = alpha_e
+        y_exp_plot   = y_exp
+
+    if alpha_s[0] > alpha_s[-1]:
+        alpha_s_plot = np.flip(alpha_s)
+        y_sim_plot   = np.flip(y_sim)
+    else:
+        alpha_s_plot = alpha_s
+        y_sim_plot   = y_sim
+
+    # --- save BOTH datasets in the same text file, on native axes ---
+    if save_fname:
+        fname = str(save_fname)
+        if not fname.endswith(".txt"):
+            fname += ".txt"
+
+        len_e = alpha_e_plot.size
+        len_s = alpha_s_plot.size
+        N = max(len_e, len_s)
+
+        # pad with NaNs so we can have one rectangular array
+        alpha_e_col = np.full(N, np.nan)
+        y_exp_col   = np.full(N, np.nan)
+        alpha_s_col = np.full(N, np.nan)
+        y_sim_col   = np.full(N, np.nan)
+
+        alpha_e_col[:len_e] = alpha_e_plot
+        y_exp_col[:len_e]   = y_exp_plot
+        alpha_s_col[:len_s] = alpha_s_plot
+        y_sim_col[:len_s]   = y_sim_plot
+
+        data = np.column_stack((alpha_e_col, y_exp_col,
+                                alpha_s_col, y_sim_col))
+
+        np.savetxt(
+            fname,
+            data,
+            fmt="%.6e",
+            header="# alpha_f_exp  I_exp  alpha_f_sim  I_sim  "
+                   f"(vertical slice at phi_f={phi_cut_deg:.3f} deg)",
+        )
+
+    # --- plotting on their respective axes ---
+    plt.figure(figsize=(6, 4))
+
+    plt.semilogy(
+        alpha_e_plot,
+        y_exp_plot,
+        label=fr"Exp @ $\varphi_f$={phi_cut_deg:.2f}°",
+        marker="o",
+        markersize=2,
+        linestyle="",
+    )
+
+    plt.semilogy(
+        alpha_s_plot,
+        y_sim_plot,
+        label=fr"Sim @ $\varphi_f$={phi_cut_deg:.2f}°",
+    )
+
+    plt.xlim(0, 1.75)
+    plt.ylim(50, 5e4)
+    plt.xlabel(r"$\alpha_f$ (deg)")
+    plt.ylabel("Intensity (a.u.)")
     plt.title(fr"Vertical slice at $\varphi_f$={phi_cut_deg:.2f}°")
-    plt.legend(); plt.grid(True, which="both", linestyle='--', linewidth=0.5)
+    plt.legend()
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
     plt.tight_layout()
 
 def truncated_radius(h, d):
@@ -172,8 +333,10 @@ def get_lognormal_params(mean, std_dev):
 # ---------- Sample Definitions ----------
 
 def sample_radial_paracrystal_truncated(omega_nm, PS_radius_xy, PS_radius_z, std_dev_radius, std_dev_height, spacing, kappa):
-    material_PS  = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.353858E-09)
-    m_substrate = ba.RefractiveMaterial("Si Sub", 5.0e-6, 7.8e-8)
+    material_PS = ba.RefractiveMaterial("PS", 2.954750e-6, 0.00819e-6) #PS-b-P2VP
+    material_Si_Sub = ba.RefractiveMaterial("Si Sub", 5.07E-06, 7.84182177E-08) #7.644e-06
+    material_SiO2 = ba.RefractiveMaterial("SiO2", 4.76E-06, 4.16025294E-08)
+    material_Vacuum = ba.RefractiveMaterial("Vacuum", 0.0, 0.0)
 
     surface_layout = ba.ParticleLayout()
     # --- 1. Define your Statistical Parameters ---
@@ -232,13 +395,13 @@ def sample_radial_paracrystal_truncated(omega_nm, PS_radius_xy, PS_radius_z, std
             total_weight = weight_r * weight_h
 
             # --- 4. Create Particle ---
-            ff_PS = ba.Spheroid(radius_val, height_val)
+            ff_PS = ba.Spheroid(radius_val, height_val/2)
             particle_PS = ba.Particle(material_PS, ff_PS)
             
             surface_layout.addParticle(particle_PS, total_weight)
 
     #interference function
-    dampening_length = 1000
+    dampening_length = 450
     iff = ba.InterferenceRadialParacrystal(spacing*nm, dampening_length*nm)
     iff_pdf = ba.Profile1DGauss(omega_nm*nm)
     iff.setProbabilityDistribution(iff_pdf)
@@ -246,18 +409,28 @@ def sample_radial_paracrystal_truncated(omega_nm, PS_radius_xy, PS_radius_z, std
     #Particle Layout
     surface_layout.setInterference(iff)
     surface_layout.setTotalParticleSurfaceDensity(3.6e-5)
-   
-    #Layers
-    top = ba.Layer(ba.Vacuum())
-    top.addLayout(surface_layout)
-    polymer = ba.Layer(material_PS, 288*nm)
-    sub = ba.Layer(m_substrate)
+
+    #Define roughness
+    transient = ba.ErfTransient()
+    autocorr_PS = ba.SelfAffineFractalModel(2.01*nm, 0.7, 200*nm)
+    autocorr_SiO2 = ba.SelfAffineFractalModel(0.1*nm, 0.7, 25*nm)
+
+    roughness_PS = ba.Roughness(autocorr_PS, transient)
+    roughness_SiO2 = ba.Roughness(autocorr_SiO2, transient)
+
+    # Define layers
+    layer_vac = ba.Layer(material_Vacuum)
+    layer_polymer_top = ba.Layer(material_PS, 303.7 *nm, roughness_PS)
+    layer_polymer_top.addLayout(surface_layout)
+    layer_SiO2 = ba.Layer(material_SiO2, 2.621*nm, roughness_SiO2)
+    layer_Si = ba.Layer(material_Si_Sub)
    
     #Sample
     s = ba.Sample()
-    s.addLayer(top)
-    s.addLayer(polymer)
-    s.addLayer(sub)
+    s.addLayer(layer_vac)
+    s.addLayer(layer_polymer_top)
+    s.addLayer(layer_SiO2)
+    s.addLayer(layer_Si)
     return s
 
 # ---------- Simulation Wrapper ----------
@@ -344,24 +517,25 @@ def solve_residuals(params, exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg):
     residuals = np.concatenate((res_h, res_v))
     
     # Logging
-    chi2 = np.sum(residuals**2)
-    print(f"Iter: omega={omega:.2f}, PS_radius_xy={PS_radius_xy:.1f}, PS_radius_z={PS_radius_z:.2e}, std_dev_radius={std_dev_radius:.2e}")
+    chi2 = np.sum(residuals**2)   
+    global ctr 
+    print(f"Iter:{ctr}, omega={omega:.2f}, PS_radius_xy={PS_radius_xy:.1f}, PS_radius_z={PS_radius_z:.2e}, std_dev_radius={std_dev_radius:.2e}")
     print(f"std_dev_height={std_dev_height:.2e}, spacing={spacing:.1e}, kappa={kappa:.1e}, int={intensity:.1e}, background={background:.1e}, chi2={chi2:.2f}")
-    
+    ctr+=1
     return residuals
 
 def run_lmfit_optimization(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg):
     params = lmfit.Parameters()
 
-    params.add('omega_nm', value=4.02841517, min=1.0, max=8)
-    params.add('PS_radius_xy', value=37, min=20, max=45)
-    params.add('PS_radius_z', value=7, min=5, max=12)
-    params.add('std_dev_radius', value=4.3, min=1, max=8)
+    params.add('omega_nm', value=8, min=1.0, max=10)
+    params.add('PS_radius_xy', value=20, min=15, max=27)
+    params.add('PS_radius_z', value=6.35, min=5, max=12)
+    params.add('std_dev_radius', value=3.87442688, min=1, max=8)
     params.add('std_dev_height', value=1.5, min=0.5, max=3)
-    params.add('spacing', value=48, min=40, max=60)
+    params.add('spacing', value=48, min=20, max=60)
     params.add('kappa', value = 0.65, min = 0.0, max = 1)
     params.add('intensity', value=4e11, min=1e10, max=10e12)
-    params.add('background', value = 28, min = 20, max=35)
+    params.add('background', value = 27.0209844, vary=False)
 
     # --- STEP 1: GLOBAL SEARCH (Coarse Fit) ---
     print("--- Step 1: Global Search (Differential Evolution) ---")
@@ -404,10 +578,10 @@ if __name__ == "__main__":
     print('start')
     # 1. SETUP
     exp_dir      = r"C:\BornAgainSimulations\data\exp-npz\feb"
-    exp_npz_file = "32_10deg.npz"
+    exp_npz_file = "33_10deg.npz"
     beamtime     = "feb"
     alpha_i_deg  = 0.10
-    ROI_deg      = (0, 0, 1, 1)
+    ROI_deg      = (0, 0, 0.6, 1.75)
     
     # 2. LOAD DATA
     exp_arr, _ = g.load_npz_data(exp_npz_file, exp_dir)
@@ -415,9 +589,9 @@ if __name__ == "__main__":
 
 
     # 3. RUN FITTING (Uncomment to fit)
-    #best_params = run_lmfit_optimization(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg)
+    best_params = run_lmfit_optimization(exp_arr, exp_axes, beamtime, alpha_i_deg, ROI_deg)
 
-    '''
+    
     # 4. FINAL SIMULATION Use best_params here
     sample = sample_radial_paracrystal_truncated(
         omega_nm=best_params['omega_nm'].value, 
@@ -428,26 +602,26 @@ if __name__ == "__main__":
         std_dev_radius=best_params['std_dev_radius'].value,
         std_dev_height=best_params['std_dev_height'].value
         )
-    '''
-    sample = sample_radial_paracrystal_truncated(
-        omega_nm = 6, 
-        spacing = 53.005,
-        kappa = 0.35,
-        PS_radius_xy = 22.555, #26.5
-        PS_radius_z = 5,
-        std_dev_radius = 8, #8
-        std_dev_height = 3 #1
-        )
+    
+    #sample = sample_radial_paracrystal_truncated(
+    #    omega_nm = 8.7886, 
+    #    spacing = 47.8097132,
+    #    kappa = 7.1920e-05,
+    #    PS_radius_xy = 16.89, #26.5
+    #    PS_radius_z = 6.48915916,
+    #    std_dev_radius = 2.34180742, #8
+    #    std_dev_height = 3.000000008 #1
+    #    )
     
     #I_sim, extent_angles = run_simulation(sample, beamtime, alpha_i_deg, ROI_deg, intensity=best_params['intensity'].value, background=best_params['background'].value)
-    I_sim, extent_angles = run_simulation(sample, beamtime, alpha_i_deg, ROI_deg, intensity=2.0575e12, background = 25.394)
+    I_sim, extent_angles = run_simulation(sample, beamtime, alpha_i_deg, ROI_deg, intensity=5.2846e+12, background = 27.0209844)
 
     # 5. VISUALIZE
     
-    I_sim = scipy.ndimage.gaussian_filter(I_sim, sigma=[2.0, 1.5])
+    #I_sim = scipy.ndimage.gaussian_filter(I_sim, sigma=[2.0, 1.5])
     
-    plot_horizontal_slice_simple(alpha_cut_deg=alpha_horizontal_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim, sim_extent=extent_angles)
-    plot_vertical_slice_simple(phi_cut_deg=phi_vertical_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim, sim_extent=extent_angles)
+    plot_horizontal_slice_simple(alpha_cut_deg=alpha_horizontal_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim, sim_extent=extent_angles, save_fname='horizontal_S33_fitted_10deg')
+    plot_vertical_slice_simple(phi_cut_deg=phi_vertical_lincut, exp_arr=exp_arr, exp_extent=exp_axes, sim_arr=I_sim, sim_extent=extent_angles, save_fname='vertical_S33_fitted_10deg')
     plt.show()
     
     # 6. 2D STITCH PLOT
@@ -460,5 +634,19 @@ if __name__ == "__main__":
     x0, x1, y0, y1 = extent_angles
     im1 = ax1.imshow(merged_2d, origin='lower', extent=(-x1, x1, y0, y1), aspect='auto', norm=LogNorm(25, 3.7e4), cmap='jet')
     ax1.set_xlabel(r"$\varphi_f$ (°)"); ax1.set_ylabel(r"$\alpha_f$ (°)")
+    ax1.xaxis.label.set_fontsize(22)
+    ax1.yaxis.label.set_fontsize(22)
+    ax1.tick_params(axis='both', labelsize=20)
+    cbar = fig.colorbar(im1, ax=ax1, label="Intensity (a.u.)")
+    cbar.set_label("Intensity (a.u.)", fontsize=20)
+    cbar.ax.tick_params(labelsize=20)
+
+    for spine in ax1.spines.values():
+        spine.set_linewidth(2.5)   # thicker axes lines
+    ax1.tick_params(width=2, length=8)  # width = line thickness, length = tick size
+    ax1.set_yticks(np.arange(0, 1.80, 0.25))
+    ax1.set_xticks(np.arange(-0.5, 0.55, 0.25))
     fig.colorbar(im1, ax=ax1, label="Intensity (a.u.)")
+    plt.savefig(r"C:\Users\Pedro\OneDrive - McMaster University\PhD - School\Research\Projects\X Ray Scattering and Diffraction\Paper\Figures\GISAXS Fits\GISAXS_surface_0p1deg_sample31.png", dpi=500)
+    plt.savefig(r"C:\Users\Pedro\OneDrive - McMaster University\PhD - School\Research\Projects\X Ray Scattering and Diffraction\Paper\Figures\GISAXS Fits\GISAXS_surface_0p1deg_sample33.pdf", dpi=500)
     plt.show()

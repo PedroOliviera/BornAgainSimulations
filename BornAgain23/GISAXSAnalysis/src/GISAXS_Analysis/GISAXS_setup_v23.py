@@ -174,6 +174,8 @@ def _rectangular_mm_extents():
     """Full detector mm extents along x (horizontal) and y (vertical)."""
     return (0.0, rayonix_size_x, 0.0, rayonix_size_y)
 
+#old 
+
 def _rect_to_angle_extents(distance_mm: float):
     """
     Compute angular extents (deg) [phi_min, phi_max, alpha_min, alpha_max]
@@ -192,6 +194,43 @@ def _rect_to_angle_extents(distance_mm: float):
     alp_min, alp_max = min(alp_min, alp_max), max(alp_min, alp_max)
     return [phi_min, phi_max, alp_min, alp_max]
 
+
+'''
+def _rect_to_angle_extents(distance_mm: float, alpha_i_deg: float):
+    """
+    Compute angular extents (deg) [phi_min, phi_max, alpha_min, alpha_max]
+    relative to the SAMPLE HORIZON.
+
+    Physics Correction:
+      - Old logic centered alpha=0 at the Direct Beam (v0).
+      - New logic centers alpha=0 at the Sample Horizon.
+      - Horizon is physically located 'down' from the Direct Beam by alpha_i.
+      - Formula: y_horizon = y_direct_beam - L * tan(alpha_i)
+    """
+    u0, v0 = _beam_center_mm()
+    x_lo, x_hi, y_lo, y_hi = _rectangular_mm_extents()
+
+    # --- 1. Calculate Horizontal Angles (Phi) ---
+    # Phi is still relative to the direct beam center (u0)
+    phi_min = np.degrees(np.arctan2(x_lo - u0, distance_mm))
+    phi_max = np.degrees(np.arctan2(x_hi - u0, distance_mm))
+
+    # --- 2. Calculate Vertical Angles (Alpha) Corrected for Horizon ---
+    # The horizon is the y-position where alpha_f = 0.
+    # Physically, the Horizon is below the Direct Beam by distance * tan(alpha_i).
+    # (Assuming standard geometry where +y is up).
+    y_horizon_mm = v0 - distance_mm * np.tan(np.deg2rad(alpha_i_deg))
+
+    # Calculate alpha relative to this Horizon line
+    alp_min = np.degrees(np.arctan2(y_lo - y_horizon_mm, distance_mm))
+    alp_max = np.degrees(np.arctan2(y_hi - y_horizon_mm, distance_mm))
+
+    # Ensure ordering
+    phi_min, phi_max = min(phi_min, phi_max), max(phi_min, phi_max)
+    alp_min, alp_max = min(alp_min, alp_max), max(alp_min, alp_max)
+
+    return [phi_min, phi_max, alp_min, alp_max]
+'''
 def _angular_pixel_sizes(distance_mm: float):
     """Angular size (deg) per pixel along φ and α."""
     phi_min, phi_max, alp_min, alp_max = _rect_to_angle_extents(distance_mm)
@@ -200,6 +239,8 @@ def _angular_pixel_sizes(distance_mm: float):
     return dphi, dalp
 
 # ------------------------- Detector (Spherical, BA23) ------------------------
+#old
+
 def create_detector(distance_mm: float, add_resolution: bool):
     """
     BA23+: spherical detector with angle axes (φ_f, α_f).
@@ -219,7 +260,28 @@ def create_detector(distance_mm: float, add_resolution: bool):
             ba.ResolutionFunction2DGaussian(sigma_deg*deg, sigma_deg*deg)
         )
     return detector
+'''
+def create_detector(distance_mm: float, alpha_i_deg: float, add_resolution: bool):
+    """
+    BA23+: spherical detector with angle axes (φ_f, α_f).
+    Now requires 'alpha_i_deg' to correctly align the Horizon at alpha_f = 0.
+    """
+    # PASS alpha_i_deg here
+    phi_min, phi_max, alp_min, alp_max = _rect_to_angle_extents(distance_mm, alpha_i_deg)
 
+    detector = ba.SphericalDetector(
+        rayonix_npx, phi_min*deg, phi_max*deg,
+        rayonix_npy, alp_min*deg, alp_max*deg
+    )
+
+    if add_resolution:
+        # Angular blur (deg)
+        sigma_deg = 0.000293
+        detector.setResolutionFunction(
+            ba.ResolutionFunction2DGaussian(sigma_deg*deg, sigma_deg*deg)
+        )
+    return detector
+'''
 # --------------------------- Sample (unchanged) ------------------------------
 def get_sampleTest():
     material_PS     = ba.RefractiveMaterial("PS",     2.51433698E-06, 2.35385822E-09)
@@ -260,7 +322,8 @@ def get_simulation_2D(sample_model,
                       divergence=False,
                       resolution=False,
                       oneThread=False,
-                      beamstop_deg=None             # optional beamstop mask [phi1, alpha1, phi2, alpha2] deg
+                      beamstop_deg=None,             # optional beamstop mask [phi1, alpha1, phi2, alpha2] deg
+                      background = 23
                       ):
     """
     2D simulation working entirely in ANGLES.
@@ -280,7 +343,7 @@ def get_simulation_2D(sample_model,
     detector.setResolutionFunction(ba.ResolutionFunction2DGaussian(sigma_phi, sigma_alpha))
     sim = ba.ScatteringSimulation(beam, sample_model, detector)
     sim.options().setIncludeSpecular(False)
-    sim.setBackground(ba.ConstantBackground(23))
+    sim.setBackground(ba.ConstantBackground(background))
     sim.options().setUseAvgMaterials(True)
     if divergence:
         sim.addParameterDistribution(ba.ParameterDistribution.BeamInclinationAngle,
@@ -300,9 +363,10 @@ def get_simulation_2D(sample_model,
         sim.detector().setRegionOfInterest(phi_lo*deg, a_lo*deg, phi_hi*deg, a_hi*deg)
 
     # Optional beamstop mask in angle units
+    
     if beamstop_deg is not None:
         bphi1, ba1, bphi2, ba2 = beamstop_deg
-        sim.detector().addMask(ba.Rectangle(bphi1*deg, ba1*deg, bphi2*deg, ba2*deg), False)
+        sim.detector().addMask(ba.Rectangle(bphi1*deg, ba1*deg, bphi2*deg, ba2*deg), True)
 
     if oneThread:
         sim.options().setNumberOfThreads(1)
